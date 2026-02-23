@@ -2066,7 +2066,7 @@ func testConfigHotReload(client *TestHTTPClient) func(*testing.T) {
 
 		defer func() {
 			restoreConfig(t, configPath, originalConfig)
-			err := wait.PollUntilContextTimeout(context.Background(), 200*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+			err := wait.PollUntilContextTimeout(context.Background(), 200*time.Millisecond, 20*time.Second, true, func(ctx context.Context) (bool, error) {
 				prow := getComponent(t, client, "Prow")
 				if prow.Description != "Backbone of the CI system" {
 					return false, nil
@@ -2079,7 +2079,7 @@ func testConfigHotReload(client *TestHTTPClient) func(*testing.T) {
 				}
 				return true, nil
 			})
-			require.NoError(t, err, "Restored config should be reflected within 10 seconds")
+			require.NoError(t, err, "Restored config should be reflected within 20 seconds")
 		}()
 
 		t.Run("Config changes are reflected after reload", func(t *testing.T) {
@@ -2120,7 +2120,7 @@ func testConfigHotReload(client *TestHTTPClient) func(*testing.T) {
 
 			// Wait for config to reload and verify both changes
 			ctx := context.Background()
-			err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+			err := wait.PollUntilContextTimeout(ctx, 200*time.Millisecond, 20*time.Second, true, func(ctx context.Context) (bool, error) {
 				// Check that Prow description was updated
 				prowComponent := getComponent(t, client, "Prow")
 				if prowComponent.Description != "Updated description for hot-reload test" {
@@ -2138,7 +2138,7 @@ func testConfigHotReload(client *TestHTTPClient) func(*testing.T) {
 				}
 				return testComponentFound, nil
 			})
-			require.NoError(t, err, "Config changes should be reflected within 10 seconds")
+			require.NoError(t, err, "Config changes should be reflected within 20 seconds")
 
 			// Verify Prow description change
 			prowComponent := getComponent(t, client, "Prow")

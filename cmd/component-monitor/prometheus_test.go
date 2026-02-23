@@ -155,7 +155,7 @@ func TestValidatePrometheusLocations(t *testing.T) {
 						PrometheusLocation: types.PrometheusLocation{
 							Cluster:   "in-cluster",
 							Namespace: "openshift-monitoring",
-							Route:     "thanos-querier",
+							Service:   "prometheus-operated",
 						},
 						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
 					},
@@ -172,7 +172,7 @@ func TestValidatePrometheusLocations(t *testing.T) {
 						PrometheusLocation: types.PrometheusLocation{
 							Cluster:   "in-cluster",
 							Namespace: "openshift-monitoring",
-							Route:     "thanos-querier",
+							Service:   "prometheus-operated",
 						},
 						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
 					},
@@ -189,7 +189,7 @@ func TestValidatePrometheusLocations(t *testing.T) {
 					PrometheusMonitor: &types.PrometheusMonitor{
 						PrometheusLocation: types.PrometheusLocation{
 							Cluster: "in-cluster",
-							Route:   "thanos-querier",
+							Service: "prometheus-operated",
 						},
 						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
 					},
@@ -198,7 +198,7 @@ func TestValidatePrometheusLocations(t *testing.T) {
 			expectedErr: errors.New("prometheusLocation namespace is required when cluster is set for component test/test"),
 		},
 		{
-			name: "invalid - in-cluster config without route",
+			name: "invalid - in-cluster config without service",
 			components: []types.MonitoringComponent{
 				{
 					ComponentSlug:    "test",
@@ -212,7 +212,83 @@ func TestValidatePrometheusLocations(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("prometheusLocation route is required when cluster is set for component test/test"),
+			expectedErr: errors.New("prometheusLocation service is required when cluster is in-cluster for component test/test"),
+		},
+		{
+			name: "invalid - in-cluster with route but no service",
+			components: []types.MonitoringComponent{
+				{
+					ComponentSlug:    "test",
+					SubComponentSlug: "test",
+					PrometheusMonitor: &types.PrometheusMonitor{
+						PrometheusLocation: types.PrometheusLocation{
+							Cluster:   "in-cluster",
+							Namespace: "openshift-monitoring",
+							Route:     "thanos-querier",
+						},
+						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
+					},
+				},
+			},
+			expectedErr: errors.New("[prometheusLocation service is required when cluster is in-cluster for component test/test, prometheusLocation route must not be set when cluster is in-cluster for component test/test]"),
+		},
+		{
+			name: "invalid - non-in-cluster with service but no route",
+			components: []types.MonitoringComponent{
+				{
+					ComponentSlug:    "test",
+					SubComponentSlug: "test",
+					PrometheusMonitor: &types.PrometheusMonitor{
+						PrometheusLocation: types.PrometheusLocation{
+							Cluster:   "app.ci",
+							Namespace: "openshift-monitoring",
+							Service:   "prometheus-operated",
+						},
+						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
+					},
+				},
+			},
+			kubeconfigDir: tmpDir,
+			expectedErr:   errors.New("[prometheusLocation route is required when cluster is set for component test/test, prometheusLocation service must not be set when cluster is not in-cluster for component test/test]"),
+		},
+		{
+			name: "invalid - in-cluster with both route and service",
+			components: []types.MonitoringComponent{
+				{
+					ComponentSlug:    "test",
+					SubComponentSlug: "test",
+					PrometheusMonitor: &types.PrometheusMonitor{
+						PrometheusLocation: types.PrometheusLocation{
+							Cluster:   "in-cluster",
+							Namespace: "openshift-monitoring",
+							Route:     "thanos-querier",
+							Service:   "prometheus-operated",
+						},
+						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
+					},
+				},
+			},
+			expectedErr: errors.New("prometheusLocation route must not be set when cluster is in-cluster for component test/test"),
+		},
+		{
+			name: "invalid - non-in-cluster with both route and service",
+			components: []types.MonitoringComponent{
+				{
+					ComponentSlug:    "test",
+					SubComponentSlug: "test",
+					PrometheusMonitor: &types.PrometheusMonitor{
+						PrometheusLocation: types.PrometheusLocation{
+							Cluster:   "app.ci",
+							Namespace: "openshift-monitoring",
+							Route:     "thanos-querier",
+							Service:   "prometheus-operated",
+						},
+						Queries: []types.PrometheusQuery{{Query: "up", Severity: types.SeverityDown}},
+					},
+				},
+			},
+			kubeconfigDir: tmpDir,
+			expectedErr:   errors.New("prometheusLocation service must not be set when cluster is not in-cluster for component test/test"),
 		},
 		{
 			name: "invalid - empty prometheusLocation",
@@ -385,7 +461,7 @@ func TestValidatePrometheusLocations(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: errors.New("prometheusLocation cannot have url set together with namespace or route for component test/test (url is mutually exclusive with cluster/namespace/route)"),
+			expectedErr: errors.New("prometheusLocation cannot have url set together with namespace, route, or service for component test/test (url is mutually exclusive with cluster/namespace/route/service)"),
 		},
 		{
 			name: "invalid - cluster set without namespace",

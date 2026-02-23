@@ -70,12 +70,11 @@ func validatePrometheusConfiguration(components []types.MonitoringComponent, kub
 		}
 
 		location := component.PrometheusMonitor.PrometheusLocation
-
-		// Validate that either url or cluster is set, but not both
 		hasURL := location.URL != ""
 		hasCluster := location.Cluster != ""
 		hasNamespace := location.Namespace != ""
 		hasRoute := location.Route != ""
+		hasService := location.Service != ""
 
 		if !hasURL && !hasCluster {
 			errors = append(errors, fmt.Errorf("prometheusLocation must have either url or cluster set for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
@@ -86,21 +85,31 @@ func validatePrometheusConfiguration(components []types.MonitoringComponent, kub
 			errors = append(errors, fmt.Errorf("prometheusLocation cannot have both url and cluster set for component %s/%s (they are mutually exclusive)", component.ComponentSlug, component.SubComponentSlug))
 		}
 
-		if hasURL && (hasNamespace || hasRoute) {
-			errors = append(errors, fmt.Errorf("prometheusLocation cannot have url set together with namespace or route for component %s/%s (url is mutually exclusive with cluster/namespace/route)", component.ComponentSlug, component.SubComponentSlug))
+		if hasURL && (hasNamespace || hasRoute || hasService) {
+			errors = append(errors, fmt.Errorf("prometheusLocation cannot have url set together with namespace, route, or service for component %s/%s (url is mutually exclusive with cluster/namespace/route/service)", component.ComponentSlug, component.SubComponentSlug))
 		}
 
-		// If cluster is set, namespace and route must also be set
 		if hasCluster {
 			if !hasNamespace {
 				errors = append(errors, fmt.Errorf("prometheusLocation namespace is required when cluster is set for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
 			}
-			if !hasRoute {
-				errors = append(errors, fmt.Errorf("prometheusLocation route is required when cluster is set for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
-			}
-			// kubeconfigDir is required when using cluster-based location, unless cluster is inClusterConfigName
-			if kubeconfigDir == "" && location.Cluster != inClusterConfigName {
-				errors = append(errors, fmt.Errorf("kubeconfig-dir is required when using cluster-based prometheusLocation for cluster %s (use %q as cluster name to use in-cluster config)", location.Cluster, inClusterConfigName))
+			if location.Cluster == inClusterConfigName {
+				if !hasService {
+					errors = append(errors, fmt.Errorf("prometheusLocation service is required when cluster is in-cluster for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
+				}
+				if hasRoute {
+					errors = append(errors, fmt.Errorf("prometheusLocation route must not be set when cluster is in-cluster for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
+				}
+			} else {
+				if !hasRoute {
+					errors = append(errors, fmt.Errorf("prometheusLocation route is required when cluster is set for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
+				}
+				if hasService {
+					errors = append(errors, fmt.Errorf("prometheusLocation service must not be set when cluster is not in-cluster for component %s/%s", component.ComponentSlug, component.SubComponentSlug))
+				}
+				if kubeconfigDir == "" {
+					errors = append(errors, fmt.Errorf("kubeconfig-dir is required when using cluster-based prometheusLocation for cluster %s (use %q as cluster name to use in-cluster config)", location.Cluster, inClusterConfigName))
+				}
 			}
 		}
 
@@ -150,10 +159,13 @@ func isURL(s string) bool {
 }
 
 // getPrometheusLocationKey returns a unique key for a PrometheusLocation.
-// For URL-based locations, returns the URL. For cluster-based locations, returns "cluster/namespace/route".
+// For URL-based locations, returns the URL. For cluster-based locations, returns "cluster/namespace/route" or "cluster/namespace/service" for in-cluster.
 func getPrometheusLocationKey(loc types.PrometheusLocation) string {
 	if loc.URL != "" {
 		return loc.URL
+	}
+	if loc.Cluster == inClusterConfigName {
+		return fmt.Sprintf("%s/%s/%s", loc.Cluster, loc.Namespace, loc.Service)
 	}
 	return fmt.Sprintf("%s/%s/%s", loc.Cluster, loc.Namespace, loc.Route)
 }
@@ -181,7 +193,8 @@ func createPrometheusClients(components []types.MonitoringComponent, kubeconfigD
 			var config *rest.Config
 			var err error
 
-			if loc.Cluster == inClusterConfigName {
+			inCluster := loc.Cluster == inClusterConfigName
+			if inCluster {
 				config, err = rest.InClusterConfig()
 				if err != nil {
 					return nil, fmt.Errorf("failed to build in-cluster config: %w", err)
@@ -203,9 +216,14 @@ func createPrometheusClients(components []types.MonitoringComponent, kubeconfigD
 				return nil, fmt.Errorf("failed to create transport for cluster %s: %w", loc.Cluster, err)
 			}
 
-			prometheusURL, err := discoverPrometheusRoute(config, loc.Namespace, loc.Route)
-			if err != nil {
-				return nil, fmt.Errorf("failed to discover Prometheus route for cluster %s: %w", loc.Cluster, err)
+			var prometheusURL string
+			if inCluster {
+				prometheusURL = buildInClusterPrometheusURL(loc)
+			} else {
+				prometheusURL, err = discoverPrometheusRoute(config, loc.Namespace, loc.Route)
+				if err != nil {
+					return nil, fmt.Errorf("failed to discover Prometheus route for cluster %s: %w", loc.Cluster, err)
+				}
 			}
 
 			client, err := promapi.NewClient(promapi.Config{
@@ -230,6 +248,10 @@ func createPrometheusClients(components []types.MonitoringComponent, kubeconfigD
 	}
 
 	return clients, nil
+}
+
+func buildInClusterPrometheusURL(loc types.PrometheusLocation) string {
+	return fmt.Sprintf("http://%s.%s.svc.cluster.local:9090", loc.Service, loc.Namespace)
 }
 
 func discoverPrometheusRoute(config *rest.Config, namespace, routeName string) (string, error) {

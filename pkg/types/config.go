@@ -95,17 +95,20 @@ type PrometheusMonitor struct {
 // Either url (for e2e/local-dev) or cluster+namespace+route (for production) must be set, but not both.
 type PrometheusLocation struct {
 	// URL is the direct URL to Prometheus (for e2e and local development).
-	// Mutually exclusive with cluster, namespace, and route.
+	// Mutually exclusive with cluster, namespace, service, and route.
 	URL string `json:"url,omitempty" yaml:"url,omitempty"`
 	// Cluster is the cluster name.
-	// When set, namespace and route must also be set.
+	// When set, namespace must also be set. For in-cluster, service is required; otherwise route is required.
 	Cluster string `json:"cluster,omitempty" yaml:"cluster,omitempty"`
-	// Namespace is the namespace where the Prometheus route exists.
+	// Namespace is the namespace where the Prometheus route or service exists.
 	// Required when cluster is set.
 	Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
 	// Route is the name of the OpenShift Route to Prometheus.
-	// Required when cluster is set.
+	// Required when cluster is set and not in-cluster.
 	Route string `json:"route,omitempty" yaml:"route,omitempty"`
+	// Service is the Kubernetes service name for Prometheus. Used when cluster is in-cluster to connect via in-cluster DNS.
+	// Required when cluster is in-cluster.
+	Service string `json:"service,omitempty" yaml:"service,omitempty"`
 }
 
 type PrometheusQuery struct {
