@@ -36,12 +36,14 @@ function markRouteTypeSeen(routeType: TourRouteType) {
   const seen = getSeenRouteTypes()
   if (seen.includes(routeType)) return
   seen.push(routeType)
-  localStorage.setItem(TOUR_SEEN_ROUTE_TYPES_KEY, JSON.stringify(seen))
+  try {
+    localStorage.setItem(TOUR_SEEN_ROUTE_TYPES_KEY, JSON.stringify(seen))
+  } catch {
+    // Ignore storage failures, worst case we show the tour again
+  }
 }
 
-function handleDestroyed() {
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : ''
-  const routeType = getRouteType(pathname)
+function handleDestroyed(routeType: TourRouteType | null) {
   if (routeType) markRouteTypeSeen(routeType)
 }
 
@@ -63,7 +65,7 @@ function openOutageActionsMenuForTour() {
   if (btn instanceof HTMLElement) btn.click()
 }
 
-function buildDriverConfig(steps: DriveStep[]) {
+function buildDriverConfig(steps: DriveStep[], initialRouteType: TourRouteType | null) {
   const isOutageMenuTour =
     steps.length >= 2 && String(steps[1]?.element).includes('outage-action-update')
   const stepsToUse =
@@ -94,7 +96,7 @@ function buildDriverConfig(steps: DriveStep[]) {
     steps: stepsToUse,
     showProgress: true,
     showButtons: ['next', 'previous', 'close'] as ('next' | 'previous' | 'close')[],
-    onDestroyed: handleDestroyed,
+    onDestroyed: () => handleDestroyed(initialRouteType),
     onCloseClick: handleCloseClick,
   }
 }
@@ -103,7 +105,8 @@ function runTourForCurrentPage() {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : ''
   const steps = stepsWithExistingTargets(getStepsForRoute(pathname), pathname)
   if (steps.length === 0) return
-  const driverObj = driver(buildDriverConfig(steps))
+  const initialRouteType = getRouteType(pathname)
+  const driverObj = driver(buildDriverConfig(steps, initialRouteType))
   driverObj.drive()
 }
 
@@ -125,9 +128,9 @@ function getStepsForRoute(pathname: string): TourStep[] {
       {
         element: '[data-tour="component-well"]',
         popover: {
-          title: 'Component card',
+          title: 'Component',
           description:
-            'Each card is a component that includes its overall status. Use the Details button to open the full component page and view more information.',
+            'Each well is a component that includes its overall status. Use the Details button to open the full component page and view more information.',
           side: 'bottom',
           align: 'center',
         },
@@ -137,7 +140,7 @@ function getStepsForRoute(pathname: string): TourStep[] {
         popover: {
           title: 'Sub-component',
           description:
-            'Sub-components show their own status. If one has an active outage, clicking goes to that outage’s details; otherwise you’ll see the sub-component page with historical outage information.',
+            'Sub-components cards show their own status. If one has an active outage, clicking goes to that outage’s details; otherwise you’ll see the sub-component page with historical outage information.',
           side: 'top',
           align: 'center',
         },
@@ -332,7 +335,7 @@ function AppTour() {
     const steps = stepsWithExistingTargets(getStepsForRoute(location.pathname), location.pathname)
     if (steps.length === 0) return
 
-    const driverObj = driver(buildDriverConfig(steps))
+    const driverObj = driver(buildDriverConfig(steps, routeType))
     driverRef.current = driverObj
     driverObj.drive()
 
