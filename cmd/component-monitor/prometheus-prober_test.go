@@ -42,15 +42,15 @@ func (m *mockPrometheusAPI) QueryRange(ctx context.Context, query string, r prom
 	return nil, nil, errors.New("not implemented")
 }
 
-func (m *mockPrometheusAPI) Series(ctx context.Context, matches []string, startTime time.Time, endTime time.Time) ([]model.LabelSet, promclientv1.Warnings, error) {
+func (m *mockPrometheusAPI) Series(ctx context.Context, matches []string, startTime time.Time, endTime time.Time, opts ...promclientv1.Option) ([]model.LabelSet, promclientv1.Warnings, error) {
 	return nil, nil, errors.New("not implemented")
 }
 
-func (m *mockPrometheusAPI) LabelNames(ctx context.Context, matches []string, startTime time.Time, endTime time.Time) ([]string, promclientv1.Warnings, error) {
+func (m *mockPrometheusAPI) LabelNames(ctx context.Context, matches []string, startTime time.Time, endTime time.Time, opts ...promclientv1.Option) ([]string, promclientv1.Warnings, error) {
 	return nil, nil, errors.New("not implemented")
 }
 
-func (m *mockPrometheusAPI) LabelValues(ctx context.Context, label string, matches []string, startTime time.Time, endTime time.Time) (model.LabelValues, promclientv1.Warnings, error) {
+func (m *mockPrometheusAPI) LabelValues(ctx context.Context, label string, matches []string, startTime time.Time, endTime time.Time, opts ...promclientv1.Option) (model.LabelValues, promclientv1.Warnings, error) {
 	return nil, nil, errors.New("not implemented")
 }
 
@@ -66,7 +66,7 @@ func (m *mockPrometheusAPI) Metadata(ctx context.Context, metric string, limit s
 	return nil, errors.New("not implemented")
 }
 
-func (m *mockPrometheusAPI) TSDB(ctx context.Context) (promclientv1.TSDBResult, error) {
+func (m *mockPrometheusAPI) TSDB(ctx context.Context, opts ...promclientv1.Option) (promclientv1.TSDBResult, error) {
 	return promclientv1.TSDBResult{}, errors.New("not implemented")
 }
 
