@@ -84,7 +84,7 @@ const ComponentWellComponent = ({ component }: ComponentWellProps) => {
   }
 
   return (
-    <ComponentWell status={component.status || 'Unknown'}>
+    <ComponentWell status={component.status || 'Unknown'} data-tour="component-well">
       <CardContent>
         <HeaderBox>
           <ComponentTitle>{component.name}</ComponentTitle>

@@ -10,6 +10,7 @@ import Header from './components/Header'
 import OutageDetailsPage from './components/outage/OutageDetailsPage'
 import SubComponentDetails from './components/sub-component/SubComponentDetails'
 import TagPage from './components/tags/TagPage'
+import AppTour from './components/tour/AppTour'
 import { AuthProvider } from './contexts/AuthContext'
 import { TagsProvider } from './contexts/TagsContext'
 import { darkAccessibilityTheme, darkTheme, lightAccessibilityTheme, lightTheme } from './themes'
@@ -97,6 +98,7 @@ function App() {
                   element={<OutageDetailsPage />}
                 />
               </Routes>
+              <AppTour />
             </Router>
           </TagsProvider>
         </AuthProvider>

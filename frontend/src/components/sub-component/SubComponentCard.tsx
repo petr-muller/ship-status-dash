@@ -121,7 +121,11 @@ const SubComponentCardComponent = ({ subComponent, componentName }: SubComponent
   }
 
   const cardContent = (
-    <SubComponentCard status={subComponentWithStatus.status || 'Unknown'} onClick={handleClick}>
+    <SubComponentCard
+      status={subComponentWithStatus.status || 'Unknown'}
+      onClick={handleClick}
+      data-tour="subcomponent-card"
+    >
       <StyledCardContent>
         <CardHeader>
           <SubComponentTitle>{deslugify(subComponent.name)}</SubComponentTitle>
@@ -139,15 +143,13 @@ const SubComponentCardComponent = ({ subComponent, componentName }: SubComponent
           </StatusChipBox>
         </CardHeader>
         <SubComponentDescription>{subComponent.description}</SubComponentDescription>
-        {subComponent.tags && subComponent.tags.length > 0 && (
-          <CardFooter>
-            <TagsContainer>
-              {subComponent.tags.map((tag) => (
-                <TagChip key={tag} tag={tag} size="small" color={getTag(tag)?.color} />
-              ))}
-            </TagsContainer>
-          </CardFooter>
-        )}
+        <CardFooter data-tour="subcomponent-tags">
+          <TagsContainer>
+            {subComponent.tags?.map((tag) => (
+              <TagChip key={tag} tag={tag} size="small" color={getTag(tag)?.color} />
+            ))}
+          </TagsContainer>
+        </CardFooter>
       </StyledCardContent>
     </SubComponentCard>
   )

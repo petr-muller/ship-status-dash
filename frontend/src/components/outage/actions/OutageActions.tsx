@@ -48,9 +48,11 @@ const OutageActions = ({ outage, onSuccess, onError }: OutageActionsProps) => {
   return (
     <>
       <Tooltip title="Outage actions" arrow>
-        <Button size="small" onClick={handleMenuClick} startIcon={<MoreVert />}>
-          Actions
-        </Button>
+        <span style={{ display: 'inline-flex' }} data-tour="outage-actions">
+          <Button size="small" onClick={handleMenuClick} startIcon={<MoreVert />}>
+            Actions
+          </Button>
+        </span>
       </Tooltip>
 
       <Menu
@@ -66,7 +68,7 @@ const OutageActions = ({ outage, onSuccess, onError }: OutageActionsProps) => {
           horizontal: 'right',
         }}
       >
-        <MenuItem onClick={handleUpdateClick}>
+        <MenuItem onClick={handleUpdateClick} data-tour="outage-action-update">
           <ListItemIcon>
             <Edit fontSize="small" />
           </ListItemIcon>
@@ -78,7 +80,7 @@ const OutageActions = ({ outage, onSuccess, onError }: OutageActionsProps) => {
           </MenuItem>
         )}
         {!outage.end_time.Valid && (
-          <MenuItem>
+          <MenuItem data-tour="outage-action-resolve">
             <EndOutage outage={outage} onEndSuccess={onSuccess} onError={onError} />
           </MenuItem>
         )}

@@ -1,8 +1,9 @@
-import { Accessibility, Brightness4, Brightness7 } from '@mui/icons-material'
+import { Accessibility, Brightness4, Brightness7, HelpOutline } from '@mui/icons-material'
 import { AppBar, Box, IconButton, styled, Toolbar, Tooltip } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 
 import Auth from './Auth'
+import { TOUR_RESTART_EVENT, useHasTour } from './tour/AppTour'
 
 interface HeaderProps {
   onToggleTheme: () => void
@@ -34,6 +35,7 @@ const Header = ({
   isAccessibilityMode,
 }: HeaderProps) => {
   const navigate = useNavigate()
+  const hasTour = useHasTour()
 
   const handleLogoClick = () => {
     navigate('/')
@@ -66,6 +68,17 @@ const Header = ({
         />
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title={hasTour ? 'Page tour' : 'Page tour unavailable'}>
+            <span style={{ display: 'inline-flex' }} data-tour="page-tour-button">
+              <AccessibilityToggle
+                disabled={!hasTour}
+                onClick={() => window.dispatchEvent(new CustomEvent(TOUR_RESTART_EVENT))}
+                aria-label="Page tour"
+              >
+                <HelpOutline />
+              </AccessibilityToggle>
+            </span>
+          </Tooltip>
           <Tooltip
             title={isAccessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
           >

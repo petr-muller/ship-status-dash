@@ -414,16 +414,19 @@ const SubComponentDetails = () => {
 
   if (!componentName || !subComponentName) {
     return (
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }} data-tour="subcomponent-detail">
         <Alert severity="error">Invalid component or subcomponent</Alert>
       </Container>
     )
   }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }} data-tour="subcomponent-detail">
       <StyledPaper status={subComponentStatus?.status || 'Unknown'}>
-        <HeaderBox status={subComponentStatus?.status || 'Unknown'}>
+        <HeaderBox
+          status={subComponentStatus?.status || 'Unknown'}
+          data-tour="subcomponent-detail-header"
+        >
           <Box>
             <Typography variant="h4">
               {componentName} / {subComponentName} - Outages
@@ -443,11 +446,16 @@ const SubComponentDetails = () => {
                 color="error"
                 startIcon={<ReportProblem />}
                 onClick={() => setCreateOutageModalOpen(true)}
+                data-tour="subcomponent-report-outage"
               >
                 Report Outage
               </Button>
             )}
-            <StyledButton variant="contained" onClick={() => navigate(`/${componentSlug}`)}>
+            <StyledButton
+              variant="contained"
+              onClick={() => navigate(`/${componentSlug}`)}
+              data-tour="subcomponent-detail-component-link"
+            >
               {componentName} Details
             </StyledButton>
           </Box>
@@ -516,7 +524,10 @@ const SubComponentDetails = () => {
 
         {!loading && !validationError && !error && (
           <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Box
+              sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}
+              data-tour="subcomponent-detail-filter"
+            >
               <ToggleButtonGroup
                 value={statusFilter}
                 exclusive
@@ -535,7 +546,7 @@ const SubComponentDetails = () => {
                 </ToggleButton>
               </ToggleButtonGroup>
             </Box>
-            <Box sx={{ height: 600, width: '100%' }}>
+            <Box sx={{ height: 600, width: '100%' }} data-tour="subcomponent-detail-grid">
               <StyledDataGrid
                 rows={sortedOutages}
                 columns={columns}

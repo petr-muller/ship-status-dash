@@ -138,7 +138,7 @@ const ComponentStatusList = () => {
         <Subtitle>Real-time monitoring of system components and availability</Subtitle>
       </TitleSection>
 
-      <ComponentsGrid>
+      <ComponentsGrid data-tour="component-list">
         {components.map((component) => (
           <ComponentWell key={slugify(component.name)} component={component} />
         ))}

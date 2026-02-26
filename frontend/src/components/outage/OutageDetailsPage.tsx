@@ -357,7 +357,7 @@ const OutageDetailsPage = () => {
         <BackButton onClick={handleBack} variant="outlined" startIcon={<ArrowBack />}>
           {getBackButtonLabel()}
         </BackButton>
-        <TopActionsContainer>
+        <TopActionsContainer data-tour="outage-detail-actions">
           {outage && <OutageActions outage={outage} onSuccess={fetchOutage} onError={setError} />}
         </TopActionsContainer>
       </Box>

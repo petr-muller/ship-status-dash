@@ -44,29 +44,33 @@ const Auth = () => {
       user.components.length > 0 ? user.components.map(deslugify).join(', ') : 'No component access'
 
     return (
-      <UserDisplay>
-        <Person fontSize="small" sx={{ color: 'text.secondary' }} />
-        <Tooltip
-          title={
-            <Box>
-              <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}>
-                Admin of:
-              </Typography>
-              <Typography variant="caption">{componentList}</Typography>
-            </Box>
-          }
-          arrow
-        >
-          <UserName>{user.username}</UserName>
-        </Tooltip>
-      </UserDisplay>
+      <Box component="span" sx={{ display: 'inline-flex' }} data-tour="login-button">
+        <UserDisplay>
+          <Person fontSize="small" sx={{ color: 'text.secondary' }} />
+          <Tooltip
+            title={
+              <Box>
+                <Typography variant="caption" sx={{ display: 'block', fontWeight: 600, mb: 0.5 }}>
+                  Admin of:
+                </Typography>
+                <Typography variant="caption">{componentList}</Typography>
+              </Box>
+            }
+            arrow
+          >
+            <UserName>{user.username}</UserName>
+          </Tooltip>
+        </UserDisplay>
+      </Box>
     )
   }
 
   return (
-    <LoginButton variant="outlined" startIcon={<Login />} onClick={handleLoginClick}>
-      Login
-    </LoginButton>
+    <Box component="span" sx={{ display: 'inline-flex' }} data-tour="login-button">
+      <LoginButton variant="outlined" startIcon={<Login />} onClick={handleLoginClick}>
+        Login
+      </LoginButton>
+    </Box>
   )
 }
 
