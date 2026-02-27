@@ -367,6 +367,7 @@ const OutageDetailsPage = () => {
         resolved={isResolved()}
         unconfirmed={!outage.confirmed_at.Valid}
         elevation={2}
+        data-tour="outage-detail-header"
       >
         <HeaderContent>
           <HeaderTitleBox>

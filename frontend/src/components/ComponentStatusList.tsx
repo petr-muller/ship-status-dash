@@ -131,7 +131,7 @@ const ComponentStatusList = () => {
 
   return (
     <StyledContainer maxWidth="lg">
-      <TitleSection>
+      <TitleSection data-tour="home-heading">
         <TitleContainer>
           <Logo src={isDarkMode ? '/logo-dark.svg' : '/logo.svg'} alt="SHIP Logo" />
         </TitleContainer>
