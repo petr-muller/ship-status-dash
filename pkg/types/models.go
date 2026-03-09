@@ -127,10 +127,10 @@ type Reason struct {
 	gorm.Model
 	OutageID uint `json:"-" gorm:"column:outage_id;not null;index"`
 	// Type defines the type of monitoring check that was performed
-	// either: prometheus, or http
+	// either: prometheus, http, or systemd
 	Type CheckType `json:"type"`
 	// Check defines the specific check that was performed
-	// a prometheus check will have a query, and a http check will have a url
+	// a prometheus check will have a query, an http check will have a url, and a systemd check will have a unit name
 	Check string `json:"check"`
 	// Results summarizes the results of the check
 	Results string `json:"results"`

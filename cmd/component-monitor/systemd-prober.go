@@ -45,12 +45,12 @@ func NewSystemdProber(componentSlug, subComponentSlug, unit string, severity typ
 }
 
 // escapeUnitName converts a systemd unit name to a D-Bus object path component.
-// Dashes become _2d, dots become _2e, etc.
+// Systemd's escaping is byte-oriented: dashes become _2d, dots become _2e, etc.
 func escapeUnitName(unit string) string {
 	var b strings.Builder
-	for _, c := range unit {
+	for _, c := range []byte(unit) {
 		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
-			b.WriteRune(c)
+			b.WriteByte(c)
 		} else {
 			b.WriteString(fmt.Sprintf("_%02x", c))
 		}
@@ -58,10 +58,17 @@ func escapeUnitName(unit string) string {
 	return b.String()
 }
 
+func (p *SystemdProber) sendResult(ctx context.Context, results chan<- ProbeResult, result ProbeResult) {
+	select {
+	case results <- result:
+	case <-ctx.Done():
+	}
+}
+
 func (p *SystemdProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 	conn, err := p.connector.ConnectSystemBus(ctx)
 	if err != nil {
-		results <- p.formatErrorResult(fmt.Errorf("failed to connect to system D-Bus: %w", err))
+		p.sendResult(ctx, results, p.formatErrorResult(fmt.Errorf("failed to connect to system D-Bus: %w", err)))
 		return
 	}
 	defer conn.Close()
@@ -73,13 +80,13 @@ func (p *SystemdProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 	err = obj.CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", 0,
 		"org.freedesktop.systemd1.Unit", "ActiveState").Store(&prop)
 	if err != nil {
-		results <- p.formatErrorResult(fmt.Errorf("failed to get ActiveState for unit %s: %w", p.unit, err))
+		p.sendResult(ctx, results, p.formatErrorResult(fmt.Errorf("failed to get ActiveState for unit %s: %w", p.unit, err)))
 		return
 	}
 
 	activeState, ok := prop.Value().(string)
 	if !ok {
-		results <- p.formatErrorResult(fmt.Errorf("unexpected ActiveState type for unit %s: %v", p.unit, prop.Value()))
+		p.sendResult(ctx, results, p.formatErrorResult(fmt.Errorf("unexpected ActiveState type for unit %s: %v", p.unit, prop.Value())))
 		return
 	}
 
@@ -90,7 +97,7 @@ func (p *SystemdProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		status = p.severity.ToStatus()
 	}
 
-	results <- ProbeResult{
+	p.sendResult(ctx, results, ProbeResult{
 		ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
 			ComponentSlug:    p.componentSlug,
 			SubComponentSlug: p.subComponentSlug,
@@ -101,7 +108,7 @@ func (p *SystemdProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 				Results: fmt.Sprintf("ActiveState: %s", activeState),
 			}},
 		},
-	}
+	})
 }
 
 func (p *SystemdProber) formatErrorResult(err error) ProbeResult {
