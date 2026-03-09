@@ -83,6 +83,8 @@ type MonitoringComponent struct {
 	PrometheusMonitor *PrometheusMonitor `json:"prometheus_monitor" yaml:"prometheus_monitor"`
 	// HTTPMonitor is the configuration for the HTTP monitor
 	HTTPMonitor *HTTPMonitor `json:"http_monitor,omitempty" yaml:"http_monitor,omitempty"`
+	// SystemdMonitor is the configuration for the systemd unit monitor
+	SystemdMonitor *SystemdMonitor `json:"systemd_monitor,omitempty" yaml:"systemd_monitor,omitempty"`
 }
 
 type PrometheusMonitor struct {
@@ -128,6 +130,14 @@ type PrometheusQuery struct {
 	// If not provided, a default step will be calculated based on the duration.
 	// If provided, it must be a valid duration string (e.g., "15s", "1m").
 	Step string `json:"step" yaml:"step"`
+}
+
+type SystemdMonitor struct {
+	// Unit is the systemd unit name to monitor (e.g., "my-service.service")
+	Unit string `json:"unit" yaml:"unit"`
+	// Severity is the severity of the outage that will be created if the unit is not active.
+	// If not provided, the severity will default to Down.
+	Severity Severity `json:"severity,omitempty" yaml:"severity,omitempty"`
 }
 
 type HTTPMonitor struct {

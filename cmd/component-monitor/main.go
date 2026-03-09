@@ -141,6 +141,11 @@ func createProbers(components []types.MonitoringComponent, prometheusClients map
 			componentLogger.Info("Added Prometheus prober for component")
 			probers = append(probers, prometheusProber)
 		}
+		if component.SystemdMonitor != nil {
+			systemdProber := NewSystemdProber(component.ComponentSlug, component.SubComponentSlug, component.SystemdMonitor.Unit, component.SystemdMonitor.Severity)
+			componentLogger.Info("Added systemd prober for component")
+			probers = append(probers, systemdProber)
+		}
 	}
 	return probers
 }
