@@ -18,10 +18,22 @@ func TestEscapeUnitName(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"sshd.service", "sshd_2eservice"},
-		{"my-service.service", "my_2dservice_2eservice"},
-		{"simple", "simple"},
-		{"a.b-c_d", "a_2eb_2dc_5fd"},
+		{
+			input:    "sshd.service",
+			expected: "sshd_2eservice",
+		},
+		{
+			input:    "my-service.service",
+			expected: "my_2dservice_2eservice",
+		},
+		{
+			input:    "simple",
+			expected: "simple",
+		},
+		{
+			input:    "a.b-c_d",
+			expected: "a_2eb_2dc_5fd",
+		},
 	}
 
 	for _, tt := range tests {
