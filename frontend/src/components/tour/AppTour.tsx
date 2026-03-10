@@ -47,14 +47,20 @@ function handleDestroyed(routeType: TourRouteType | null) {
   if (routeType) markRouteTypeSeen(routeType)
 }
 
-function stepsWithExistingTargets(steps: DriveStep[], pathname: string): DriveStep[] {
+function stepsWithExistingTargets(steps: DriveStep[]): DriveStep[] {
   if (typeof document === 'undefined') return steps
-  const isOutageDetailTour =
-    pathname.includes('/outages/') &&
-    steps.length >= 2 &&
-    String(steps[1]?.element).includes('outage-action-update')
-  if (isOutageDetailTour && steps[0]) {
-    if (!document.querySelector(String(steps[0].element))) return []
+  const hasOutageActionsStep = steps.some((s) =>
+    String(s.element).includes('outage-detail-actions'),
+  )
+  if (hasOutageActionsStep) {
+    const headerEl = document.querySelector('[data-tour="outage-detail-header"]')
+    const actionsEl = document.querySelector('[data-tour="outage-detail-actions"]')
+    const hasActionsButton = actionsEl?.querySelector('button')
+    if (!headerEl) return []
+    if (!hasActionsButton) return steps.slice(0, 1)
+    // Return all steps without filtering: the actions container is always present but only has a
+    // button when the user is admin; the update/resolve targets live in the menu and only exist
+    // after we open it during the tour.
     return steps
   }
   return steps.filter((s) => document.querySelector(String(s.element)))
@@ -66,32 +72,33 @@ function openOutageActionsMenuForTour() {
 }
 
 function buildDriverConfig(steps: DriveStep[], initialRouteType: TourRouteType | null) {
-  const isOutageMenuTour =
-    steps.length >= 2 && String(steps[1]?.element).includes('outage-action-update')
-  const stepsToUse =
-    isOutageMenuTour && steps[0]?.popover
-      ? steps.map((s, i) =>
-          i === 0
-            ? {
-                ...s,
-                popover: {
-                  ...s.popover,
-                  onNextClick: (
-                    _el: Element | undefined,
-                    _step: DriveStep,
-                    opts: {
-                      driver: ReturnType<typeof driver>
-                      state?: { activeIndex?: number }
-                    },
-                  ) => {
-                    openOutageActionsMenuForTour()
-                    setTimeout(() => opts.driver.moveNext(), 200)
+  const actionsStepIndex = steps.findIndex((s) =>
+    String(s.element).includes('outage-detail-actions'),
+  )
+  const isOutageMenuTour = actionsStepIndex >= 0 && steps[actionsStepIndex]?.popover
+  const stepsToUse = isOutageMenuTour
+    ? steps.map((s, i) =>
+        i === actionsStepIndex
+          ? {
+              ...s,
+              popover: {
+                ...s.popover,
+                onNextClick: (
+                  _el: Element | undefined,
+                  _step: DriveStep,
+                  opts: {
+                    driver: ReturnType<typeof driver>
+                    state?: { activeIndex?: number }
                   },
+                ) => {
+                  openOutageActionsMenuForTour()
+                  setTimeout(() => opts.driver.moveNext(), 200)
                 },
-              }
-            : s,
-        )
-      : steps
+              },
+            }
+          : s,
+      )
+    : steps
   return {
     steps: stepsToUse,
     showProgress: true,
@@ -103,7 +110,7 @@ function buildDriverConfig(steps: DriveStep[], initialRouteType: TourRouteType |
 
 function runTourForCurrentPage() {
   const pathname = typeof window !== 'undefined' ? window.location.pathname : ''
-  const steps = stepsWithExistingTargets(getStepsForRoute(pathname), pathname)
+  const steps = stepsWithExistingTargets(getStepsForRoute(pathname))
   if (steps.length === 0) return
   const initialRouteType = getRouteType(pathname)
   const driverObj = driver(buildDriverConfig(steps, initialRouteType))
@@ -116,7 +123,7 @@ function getStepsForRoute(pathname: string): TourStep[] {
   if (pathname === '/') {
     return [
       {
-        element: 'body',
+        element: '[data-tour="home-heading"]',
         popover: {
           title: 'Welcome',
           description:
@@ -179,6 +186,16 @@ function getStepsForRoute(pathname: string): TourStep[] {
   }
   if (pathname.includes('/outages/')) {
     return [
+      {
+        element: '[data-tour="outage-detail-header"]',
+        popover: {
+          title: 'Outage details',
+          description:
+            'This page shows the outage summary, timing, who created or resolved it, and any automated monitoring or reporting.',
+          side: 'bottom',
+          align: 'center',
+        },
+      },
       {
         element: '[data-tour="outage-detail-actions"]',
         popover: {
@@ -332,7 +349,7 @@ function AppTour() {
 
     if (alreadySeen) return
 
-    const steps = stepsWithExistingTargets(getStepsForRoute(location.pathname), location.pathname)
+    const steps = stepsWithExistingTargets(getStepsForRoute(location.pathname))
     if (steps.length === 0) return
 
     const driverObj = driver(buildDriverConfig(steps, routeType))
