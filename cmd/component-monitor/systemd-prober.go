@@ -52,7 +52,7 @@ func escapeUnitName(unit string) string {
 		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
 			b.WriteByte(c)
 		} else {
-			b.WriteString(fmt.Sprintf("_%02x", c))
+			fmt.Fprintf(&b, "_%02x", c)
 		}
 	}
 	return b.String()

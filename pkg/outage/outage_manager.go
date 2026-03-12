@@ -112,7 +112,7 @@ func (m *DBOutageManager) UpdateOutage(outage *types.Outage) error {
 	return nil
 }
 
-// Delegate read operations to repository
+// GetOutageByID delegates read operations to the repository.
 func (m *DBOutageManager) GetOutageByID(componentSlug, subComponentSlug string, outageID uint) (*types.Outage, error) {
 	outageRepo := repositories.NewGORMOutageRepository(m.db)
 	return outageRepo.GetOutageByID(componentSlug, subComponentSlug, outageID)

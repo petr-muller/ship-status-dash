@@ -374,12 +374,12 @@ func (h *Handlers) GetOutageJSON(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
-	outageId := vars["outageId"]
+	outageIDStr := vars["outageId"]
 
 	logger := h.logger.WithFields(logrus.Fields{
 		"component":     componentName,
 		"sub_component": subComponentName,
-		"outage_id":     outageId,
+		"outage_id":     outageIDStr,
 	})
 
 	component := h.config().GetComponentBySlug(componentName)
@@ -394,7 +394,7 @@ func (h *Handlers) GetOutageJSON(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outageID, err := strconv.ParseUint(outageId, 10, 32)
+	outageID, err := strconv.ParseUint(outageIDStr, 10, 32)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid outage ID")
 		return
@@ -420,7 +420,7 @@ func (h *Handlers) DeleteOutage(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	componentName := vars["componentName"]
 	subComponentName := vars["subComponentName"]
-	outageId := vars["outageId"]
+	outageIDStr := vars["outageId"]
 
 	activeUser, ok := GetUserFromContext(r.Context())
 	if !ok {
@@ -431,7 +431,7 @@ func (h *Handlers) DeleteOutage(w http.ResponseWriter, r *http.Request) {
 	logger := h.logger.WithFields(logrus.Fields{
 		"component":     componentName,
 		"sub_component": subComponentName,
-		"outage_id":     outageId,
+		"outage_id":     outageIDStr,
 		"active_user":   activeUser,
 	})
 
@@ -453,7 +453,7 @@ func (h *Handlers) DeleteOutage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	outageID, err := strconv.ParseUint(outageId, 10, 32)
+	outageID, err := strconv.ParseUint(outageIDStr, 10, 32)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid outage ID")
 		return
