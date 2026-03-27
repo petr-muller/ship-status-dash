@@ -20,9 +20,14 @@ const ExternalPageViewer = () => {
   }
 
   return (
-    <Box sx={{ height: 'calc(100vh - 64px)', position: 'relative' }} data-tour="external-page-content">
+    <Box
+      sx={{ height: 'calc(100vh - 64px)', position: 'relative' }}
+      data-tour="external-page-content"
+    >
       {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8, position: 'absolute', inset: 0 }}>
+        <Box
+          sx={{ display: 'flex', justifyContent: 'center', pt: 8, position: 'absolute', inset: 0 }}
+        >
           <CircularProgress />
         </Box>
       )}

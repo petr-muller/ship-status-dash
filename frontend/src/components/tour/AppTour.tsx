@@ -8,7 +8,12 @@ type TourStep = DriveStep & { waitForTarget?: boolean }
 const TOUR_SEEN_ROUTE_TYPES_KEY = 'shipStatusTourSeenRouteTypes'
 export const TOUR_RESTART_EVENT = 'shipStatusTourRestart'
 
-const ROUTE_TYPES_WITH_TOURS = ['home', 'subcomponent-detail', 'outage-detail', 'external-page'] as const
+const ROUTE_TYPES_WITH_TOURS = [
+  'home',
+  'subcomponent-detail',
+  'outage-detail',
+  'external-page',
+] as const
 type TourRouteType = (typeof ROUTE_TYPES_WITH_TOURS)[number]
 
 function getRouteType(pathname: string): TourRouteType | null {
