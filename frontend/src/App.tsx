@@ -6,6 +6,7 @@ import { Route, BrowserRouter as Router, Routes, useLocation } from 'react-route
 
 import ComponentDetailsPage from './components/component/ComponentDetailsPage'
 import ComponentStatusList from './components/ComponentStatusList'
+import ExternalPageViewer from './components/ExternalPageViewer'
 import Header from './components/Header'
 import OutageDetailsPage from './components/outage/OutageDetailsPage'
 import SubComponentDetails from './components/sub-component/SubComponentDetails'
@@ -90,6 +91,7 @@ function App() {
               />
               <Routes>
                 <Route path="/" element={<ComponentStatusList />} />
+                <Route path="/pages/:pageSlug" element={<ExternalPageViewer />} />
                 <Route path="/tags/:tag" element={<TagPage />} />
                 <Route path="/:componentSlug" element={<ComponentDetailsPage />} />
                 <Route path="/:componentSlug/:subComponentSlug" element={<SubComponentDetails />} />

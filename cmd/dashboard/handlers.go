@@ -28,6 +28,7 @@ type Handlers struct {
 	pingRepo               repositories.ComponentPingRepository
 	groupCache             *auth.GroupMembershipCache
 	monitorReportProcessor *ComponentMonitorReportProcessor
+	externalPageCaches     map[string]*ExternalPageCache
 }
 
 // NewHandlers creates a new Handlers instance with the provided dependencies.
@@ -39,6 +40,13 @@ func NewHandlers(logger *logrus.Logger, configManager *config.Manager[types.Dash
 		pingRepo:               pingRepo,
 		groupCache:             groupCache,
 		monitorReportProcessor: NewComponentMonitorReportProcessor(outageManager, pingRepo, configManager, logger),
+		externalPageCaches: map[string]*ExternalPageCache{
+			"spc-dashboard": NewExternalPageCache(
+				"https://storage.googleapis.com/ship-spc-dashboard/index.html",
+				1*time.Hour,
+				logger,
+			),
+		},
 	}
 }
 

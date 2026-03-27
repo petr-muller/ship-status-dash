@@ -1,4 +1,4 @@
-import { Accessibility, Brightness4, Brightness7, HelpOutline } from '@mui/icons-material'
+import { Accessibility, Brightness4, Brightness7, HelpOutline, Insights } from '@mui/icons-material'
 import { AppBar, Box, IconButton, styled, Toolbar, Tooltip } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 
@@ -87,6 +87,15 @@ const Header = ({
               aria-label="Toggle accessibility mode"
             >
               <Accessibility color={isAccessibilityMode ? 'primary' : 'inherit'} />
+            </AccessibilityToggle>
+          </Tooltip>
+          <Tooltip title="SHIP Statistical Process Controls">
+            <AccessibilityToggle
+              onClick={() => navigate('/pages/spc-dashboard')}
+              aria-label="SHIP Statistical Process Controls"
+              data-tour="spc-dashboard-button"
+            >
+              <Insights />
             </AccessibilityToggle>
           </Tooltip>
           <Tooltip title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}>

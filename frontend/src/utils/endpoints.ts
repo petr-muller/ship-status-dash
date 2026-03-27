@@ -70,3 +70,6 @@ export const getOutageAuditLogsEndpoint = (
   `${getPublicDomain()}/api/components/${slugify(componentName)}/${slugify(subComponentName)}/outages/${outageId}/audit-logs`
 
 export const getUserEndpoint = () => `${getProtectedDomain()}/api/user`
+
+export const getExternalPageEndpoint = (slug: string) =>
+  `${getPublicDomain()}/api/external-pages/${slug}`

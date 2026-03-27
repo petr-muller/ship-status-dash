@@ -152,6 +152,12 @@ func (s *Server) setupRoutes() http.Handler {
 			handler:   s.handlers.PostComponentMonitorReportJSON,
 			protected: true,
 		},
+		{
+			path:      "/api/external-pages/{pageSlug}",
+			method:    http.MethodGet,
+			handler:   s.handlers.GetExternalPageHTML,
+			protected: false,
+		},
 	}
 
 	router := mux.NewRouter()

@@ -8,11 +8,12 @@ type TourStep = DriveStep & { waitForTarget?: boolean }
 const TOUR_SEEN_ROUTE_TYPES_KEY = 'shipStatusTourSeenRouteTypes'
 export const TOUR_RESTART_EVENT = 'shipStatusTourRestart'
 
-const ROUTE_TYPES_WITH_TOURS = ['home', 'subcomponent-detail', 'outage-detail'] as const
+const ROUTE_TYPES_WITH_TOURS = ['home', 'subcomponent-detail', 'outage-detail', 'external-page'] as const
 type TourRouteType = (typeof ROUTE_TYPES_WITH_TOURS)[number]
 
 function getRouteType(pathname: string): TourRouteType | null {
   if (pathname === '/') return 'home'
+  if (pathname.startsWith('/pages/')) return 'external-page'
   if (pathname.includes('/outages/')) return 'outage-detail'
   const segments = pathname.split('/').filter(Boolean)
   if (segments.length === 2 && !pathname.startsWith('/tags')) return 'subcomponent-detail'
@@ -286,6 +287,20 @@ function getStepsForRoute(pathname: string): TourStep[] {
           description: 'Use the Actions button on a row to update an outage or resolve it.',
           side: 'left',
           align: 'center',
+        },
+      },
+    ]
+  }
+  if (pathname.startsWith('/pages/')) {
+    return [
+      {
+        element: '[data-tour="external-page-content"]',
+        popover: {
+          title: 'Statistical Process Controls',
+          description:
+            'This dashboard uses control charts to monitor process stability over time, detecting anomalies and ensuring SHIP metrics remain within expected bounds. Content is refreshed periodically.',
+          side: 'top' as const,
+          align: 'center' as const,
         },
       },
     ]
