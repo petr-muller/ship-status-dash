@@ -108,14 +108,18 @@ func (h *Handlers) GetExternalPageHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Clone content before modifying to avoid mutating the cached slice
+	buf := make([]byte, len(content))
+	copy(buf, content)
+
 	// Inject resize script to help embedded charts render at the correct size
-	if idx := bytes.LastIndex(content, []byte("</body>")); idx != -1 {
-		content = append(content[:idx], append(resizeScript, content[idx:]...)...)
+	if idx := bytes.LastIndex(buf, []byte("</body>")); idx != -1 {
+		buf = append(buf[:idx], append(resizeScript, buf[idx:]...)...)
 	} else {
-		content = append(content, resizeScript...)
+		buf = append(buf, resizeScript...)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(content)
+	w.Write(buf)
 }

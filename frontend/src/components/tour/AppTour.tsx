@@ -228,6 +228,20 @@ function getStepsForRoute(pathname: string): TourStep[] {
       },
     ]
   }
+  if (pathname.startsWith('/pages/')) {
+    return [
+      {
+        element: '[data-tour="external-page-content"]',
+        popover: {
+          title: 'Statistical Process Controls',
+          description:
+            'This dashboard uses control charts to monitor process stability over time, detecting anomalies and ensuring SHIP metrics remain within expected bounds. Content is refreshed periodically.',
+          side: 'top' as const,
+          align: 'center' as const,
+        },
+      },
+    ]
+  }
   if (segments.length === 2 && !pathname.startsWith('/tags')) {
     return [
       {
@@ -287,20 +301,6 @@ function getStepsForRoute(pathname: string): TourStep[] {
           description: 'Use the Actions button on a row to update an outage or resolve it.',
           side: 'left',
           align: 'center',
-        },
-      },
-    ]
-  }
-  if (pathname.startsWith('/pages/')) {
-    return [
-      {
-        element: '[data-tour="external-page-content"]',
-        popover: {
-          title: 'Statistical Process Controls',
-          description:
-            'This dashboard uses control charts to monitor process stability over time, detecting anomalies and ensuring SHIP metrics remain within expected bounds. Content is refreshed periodically.',
-          side: 'top' as const,
-          align: 'center' as const,
         },
       },
     ]
