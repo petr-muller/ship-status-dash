@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -71,8 +73,14 @@ func (c *ExternalPageCache) Get() ([]byte, error) {
 }
 
 func (c *ExternalPageCache) fetch() ([]byte, error) {
-	fetchURL := fmt.Sprintf("%s?_t=%d", c.sourceURL, time.Now().Unix())
-	resp, err := c.client.Get(fetchURL)
+	u, err := url.Parse(c.sourceURL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing source URL: %w", err)
+	}
+	q := u.Query()
+	q.Set("_t", strconv.FormatInt(time.Now().Unix(), 10))
+	u.RawQuery = q.Encode()
+	resp, err := c.client.Get(u.String())
 	if err != nil {
 		return nil, fmt.Errorf("fetching external page: %w", err)
 	}
