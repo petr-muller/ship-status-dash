@@ -1,5 +1,5 @@
 import { Box, CircularProgress, Typography, useTheme } from '@mui/material'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 import { externalPages } from '../constants/externalPages'
@@ -10,6 +10,10 @@ const ExternalPageViewer = () => {
   const [loading, setLoading] = useState(true)
   const theme = useTheme()
   const page = externalPages.find((p) => p.slug === pageSlug)
+
+  useEffect(() => {
+    setLoading(true)
+  }, [pageSlug])
 
   if (!page) {
     return (

@@ -3,6 +3,8 @@ import 'driver.js/dist/driver.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
+import { EXTERNAL_PAGES_PATH_PREFIX, externalPages } from '../../constants/externalPages'
+
 type TourStep = DriveStep & { waitForTarget?: boolean }
 
 const TOUR_SEEN_ROUTE_TYPES_KEY = 'shipStatusTourSeenRouteTypes'
@@ -18,7 +20,7 @@ type TourRouteType = (typeof ROUTE_TYPES_WITH_TOURS)[number]
 
 function getRouteType(pathname: string): TourRouteType | null {
   if (pathname === '/') return 'home'
-  if (pathname.startsWith('/pages/')) return 'external-page'
+  if (pathname.startsWith(`${EXTERNAL_PAGES_PATH_PREFIX}/`)) return 'external-page'
   if (pathname.includes('/outages/')) return 'outage-detail'
   const segments = pathname.split('/').filter(Boolean)
   if (segments.length === 2 && !pathname.startsWith('/tags')) return 'subcomponent-detail'
@@ -233,14 +235,17 @@ function getStepsForRoute(pathname: string): TourStep[] {
       },
     ]
   }
-  if (pathname.startsWith('/pages/')) {
+  if (pathname.startsWith(`${EXTERNAL_PAGES_PATH_PREFIX}/`)) {
+    const slug = pathname.slice(`${EXTERNAL_PAGES_PATH_PREFIX}/`.length)
+    const page = externalPages.find((p) => p.slug === slug)
     return [
       {
         element: '[data-tour="external-page-content"]',
         popover: {
-          title: 'Statistical Process Controls',
+          title: page?.label ?? 'External Page',
           description:
-            'This dashboard uses control charts to monitor process stability over time, detecting anomalies and ensuring SHIP metrics remain within expected bounds. Content is refreshed periodically.',
+            page?.description ??
+            'This page displays externally hosted content. Content is refreshed periodically.',
           side: 'top' as const,
           align: 'center' as const,
         },

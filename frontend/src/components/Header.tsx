@@ -2,6 +2,7 @@ import { Accessibility, Brightness4, Brightness7, HelpOutline, Insights } from '
 import { AppBar, Box, IconButton, styled, Toolbar, Tooltip } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 
+import { EXTERNAL_PAGES_PATH_PREFIX, externalPages } from '../constants/externalPages'
 import Auth from './Auth'
 import { TOUR_RESTART_EVENT, useHasTour } from './tour/AppTour'
 
@@ -12,15 +13,7 @@ interface HeaderProps {
   isAccessibilityMode: boolean
 }
 
-const DarkModeToggle = styled(IconButton)(({ theme }) => ({
-  color: theme.palette.text.primary,
-  backgroundColor: theme.palette.action.hover,
-  '&:hover': {
-    backgroundColor: theme.palette.action.selected,
-  },
-}))
-
-const AccessibilityToggle = styled(IconButton)(({ theme }) => ({
+const HeaderIconButton = styled(IconButton)(({ theme }) => ({
   color: theme.palette.text.primary,
   backgroundColor: theme.palette.action.hover,
   '&:hover': {
@@ -36,6 +29,7 @@ const Header = ({
 }: HeaderProps) => {
   const navigate = useNavigate()
   const hasTour = useHasTour()
+  const spcPage = externalPages.find((p) => p.slug === 'spc-dashboard')
 
   const handleLogoClick = () => {
     navigate('/')
@@ -70,38 +64,40 @@ const Header = ({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Tooltip title={hasTour ? 'Page tour' : 'Page tour unavailable'}>
             <span style={{ display: 'inline-flex' }} data-tour="page-tour-button">
-              <AccessibilityToggle
+              <HeaderIconButton
                 disabled={!hasTour}
                 onClick={() => window.dispatchEvent(new CustomEvent(TOUR_RESTART_EVENT))}
                 aria-label="Page tour"
               >
                 <HelpOutline />
-              </AccessibilityToggle>
+              </HeaderIconButton>
             </span>
           </Tooltip>
           <Tooltip
             title={isAccessibilityMode ? 'Disable accessibility mode' : 'Enable accessibility mode'}
           >
-            <AccessibilityToggle
+            <HeaderIconButton
               onClick={onToggleAccessibility}
               aria-label="Toggle accessibility mode"
             >
               <Accessibility color={isAccessibilityMode ? 'primary' : 'inherit'} />
-            </AccessibilityToggle>
+            </HeaderIconButton>
           </Tooltip>
-          <Tooltip title="SHIP Statistical Process Controls">
-            <AccessibilityToggle
-              onClick={() => navigate('/pages/spc-dashboard')}
-              aria-label="SHIP Statistical Process Controls"
-              data-tour="spc-dashboard-button"
-            >
-              <Insights />
-            </AccessibilityToggle>
-          </Tooltip>
+          {spcPage && (
+            <Tooltip title={spcPage.description || spcPage.label}>
+              <HeaderIconButton
+                onClick={() => navigate(`${EXTERNAL_PAGES_PATH_PREFIX}/${spcPage.slug}`)}
+                aria-label={spcPage.description || spcPage.label}
+                data-tour="spc-dashboard-button"
+              >
+                <Insights />
+              </HeaderIconButton>
+            </Tooltip>
+          )}
           <Tooltip title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
-            <DarkModeToggle onClick={onToggleTheme}>
+            <HeaderIconButton onClick={onToggleTheme}>
               {isDarkMode ? <Brightness7 /> : <Brightness4 />}
-            </DarkModeToggle>
+            </HeaderIconButton>
           </Tooltip>
           <Auth />
         </Box>

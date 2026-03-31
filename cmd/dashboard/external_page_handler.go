@@ -25,15 +25,20 @@ type ExternalPageCache struct {
 	content   []byte
 	fetchedAt time.Time
 	ttl       time.Duration
-	sourceURL string
+	sourceURL *url.URL
 	logger    *logrus.Logger
 	client    *http.Client
 }
 
 // NewExternalPageCache creates a new cache for the given URL with the specified TTL.
+// Panics if sourceURL is not a valid URL.
 func NewExternalPageCache(sourceURL string, ttl time.Duration, logger *logrus.Logger) *ExternalPageCache {
+	u, err := url.Parse(sourceURL)
+	if err != nil {
+		panic(fmt.Sprintf("invalid external page source URL %q: %v", sourceURL, err))
+	}
 	return &ExternalPageCache{
-		sourceURL: sourceURL,
+		sourceURL: u,
 		ttl:       ttl,
 		logger:    logger,
 		client:    &http.Client{Timeout: 30 * time.Second},
@@ -73,10 +78,8 @@ func (c *ExternalPageCache) Get() ([]byte, error) {
 }
 
 func (c *ExternalPageCache) fetch() ([]byte, error) {
-	u, err := url.Parse(c.sourceURL)
-	if err != nil {
-		return nil, fmt.Errorf("parsing source URL: %w", err)
-	}
+	// Clone the parsed URL to avoid mutating the stored value
+	u := *c.sourceURL
 	q := u.Query()
 	q.Set("_t", strconv.FormatInt(time.Now().Unix(), 10))
 	u.RawQuery = q.Encode()
