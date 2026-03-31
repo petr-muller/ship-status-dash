@@ -101,6 +101,20 @@ func (c *ExternalPageCache) fetch() ([]byte, error) {
 	return body, nil
 }
 
+// injectResizeScript inserts the resize script before </body> if present,
+// or appends it to the end of the content otherwise.
+func injectResizeScript(content []byte) []byte {
+	buf := make([]byte, len(content))
+	copy(buf, content)
+
+	if idx := bytes.LastIndex(buf, []byte("</body>")); idx != -1 {
+		buf = append(buf[:idx], append(resizeScript, buf[idx:]...)...)
+	} else {
+		buf = append(buf, resizeScript...)
+	}
+	return buf
+}
+
 // GetExternalPageHTML serves cached HTML content for the requested external page.
 func (h *Handlers) GetExternalPageHTML(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -119,18 +133,7 @@ func (h *Handlers) GetExternalPageHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clone content before modifying to avoid mutating the cached slice
-	buf := make([]byte, len(content))
-	copy(buf, content)
-
-	// Inject resize script to help embedded charts render at the correct size
-	if idx := bytes.LastIndex(buf, []byte("</body>")); idx != -1 {
-		buf = append(buf[:idx], append(resizeScript, buf[idx:]...)...)
-	} else {
-		buf = append(buf, resizeScript...)
-	}
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf)
+	w.Write(injectResizeScript(content))
 }

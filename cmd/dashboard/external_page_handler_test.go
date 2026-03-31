@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,6 +96,52 @@ func TestExternalPageCache_ErrorWhenNoCacheAndFetchFails(t *testing.T) {
 
 	_, err := cache.Get()
 	assert.Error(t, err)
+}
+
+func TestInjectResizeScript_WithBodyTag(t *testing.T) {
+	input := []byte("<html><body>content</body></html>")
+	result := injectResizeScript(input)
+
+	assert.Contains(t, string(result), "window.dispatchEvent(new Event('resize'))")
+	// Script should appear before </body>
+	scriptIdx := bytes.Index(result, []byte("<script>"))
+	bodyIdx := bytes.Index(result, []byte("</body>"))
+	assert.Less(t, scriptIdx, bodyIdx, "resize script should be injected before </body>")
+	// Original content and closing tags should still be present
+	assert.Contains(t, string(result), "content")
+	assert.Contains(t, string(result), "</body></html>")
+	// Original input must not be mutated
+	assert.Equal(t, "<html><body>content</body></html>", string(input))
+}
+
+func TestInjectResizeScript_WithoutBodyTag(t *testing.T) {
+	input := []byte("<html><div>content</div></html>")
+	result := injectResizeScript(input)
+
+	assert.Contains(t, string(result), "window.dispatchEvent(new Event('resize'))")
+	// Script should be appended at the end
+	assert.True(t, bytes.HasSuffix(result, resizeScript), "resize script should be appended at end when no </body> tag")
+	// Original input must not be mutated
+	assert.Equal(t, "<html><div>content</div></html>", string(input))
+}
+
+func TestGetExternalPageHTML_FetchError(t *testing.T) {
+	// Use an unreachable address so cache.Get() fails with no stale content
+	h := &Handlers{
+		logger: logrus.New(),
+		externalPageCaches: map[string]*ExternalPageCache{
+			"broken": newTestExternalPageCache("http://localhost:1", 1*time.Hour),
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/external-pages/broken", nil)
+	req = mux.SetURLVars(req, map[string]string{"pageSlug": "broken"})
+	w := httptest.NewRecorder()
+
+	h.GetExternalPageHTML(w, req)
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+	assert.Contains(t, w.Body.String(), "Failed to fetch external page")
 }
 
 func TestGetExternalPageHTML_ValidSlug(t *testing.T) {
