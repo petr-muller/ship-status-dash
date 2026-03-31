@@ -34,6 +34,7 @@ const ExternalPageViewer = () => {
       <iframe
         src={`${getExternalPageEndpoint(page.slug)}?theme=${theme.palette.mode}`}
         title={page.label}
+        sandbox="allow-scripts"
         onLoad={() => setLoading(false)}
         style={{
           width: '100%',

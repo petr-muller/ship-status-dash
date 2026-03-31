@@ -90,7 +90,7 @@ func (c *ExternalPageCache) fetch() ([]byte, error) {
 		return nil, fmt.Errorf("external page returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB cap
 	if err != nil {
 		return nil, fmt.Errorf("reading external page body: %w", err)
 	}
