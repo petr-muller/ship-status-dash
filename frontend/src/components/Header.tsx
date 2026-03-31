@@ -96,7 +96,10 @@ const Header = ({
             </Tooltip>
           )}
           <Tooltip title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}>
-            <HeaderIconButton onClick={onToggleTheme}>
+            <HeaderIconButton
+              onClick={onToggleTheme}
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
               {isDarkMode ? <Brightness7 /> : <Brightness4 />}
             </HeaderIconButton>
           </Tooltip>

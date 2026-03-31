@@ -93,9 +93,14 @@ func (c *ExternalPageCache) fetch() ([]byte, error) {
 		return nil, fmt.Errorf("external page returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB cap
+	const maxPageSize = 10 << 20 // 10 MB
+	lr := &io.LimitedReader{R: resp.Body, N: maxPageSize + 1}
+	body, err := io.ReadAll(lr)
 	if err != nil {
 		return nil, fmt.Errorf("reading external page body: %w", err)
+	}
+	if int64(len(body)) > maxPageSize {
+		return nil, fmt.Errorf("external page body too large (exceeded %d bytes)", maxPageSize)
 	}
 
 	return body, nil
@@ -108,7 +113,11 @@ func injectResizeScript(content []byte) []byte {
 	copy(buf, content)
 
 	if idx := bytes.LastIndex(buf, []byte("</body>")); idx != -1 {
-		buf = append(buf[:idx], append(resizeScript, buf[idx:]...)...)
+		result := make([]byte, 0, len(buf)+len(resizeScript))
+		result = append(result, buf[:idx]...)
+		result = append(result, resizeScript...)
+		result = append(result, buf[idx:]...)
+		buf = result
 	} else {
 		buf = append(buf, resizeScript...)
 	}
