@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="build-farm-canary" tests="4" failures="0" errors="0">
+  <testcase name="scheduling" classname="build-farm-canary"/>
+  <testcase name="git-clone" classname="build-farm-canary"/>
+  <testcase name="internal-registry" classname="build-farm-canary"/>
+  <testcase name="quay-pull" classname="build-farm-canary"/>
+</testsuite>

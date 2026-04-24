@@ -115,8 +115,35 @@ func loadAndValidateConfig(log *logrus.Logger, configPath string, kubeconfigDir 
 			if strings.TrimSpace(component.JUnitMonitor.JobName) == "" {
 				return nil, fmt.Errorf("job_name is required for junit_monitor on component %s/%s", component.ComponentSlug, component.SubComponentSlug)
 			}
-			if _, err := time.ParseDuration(component.JUnitMonitor.MaxAge); err != nil {
+			maxAge, err := time.ParseDuration(component.JUnitMonitor.MaxAge)
+			if err != nil {
 				return nil, fmt.Errorf("invalid max_age for junit_monitor on component %s/%s: %w", component.ComponentSlug, component.SubComponentSlug, err)
+			}
+			if maxAge <= 0 {
+				return nil, fmt.Errorf("max_age for junit_monitor on component %s/%s must be a positive duration, got %q", component.ComponentSlug, component.SubComponentSlug, component.JUnitMonitor.MaxAge)
+			}
+			switch strings.ToLower(strings.TrimSpace(component.JUnitMonitor.ArtifactURLStyle)) {
+			case "", types.JUnitArtifactStyleGCS, types.JUnitArtifactStyleGCSWeb:
+			default:
+				return nil, fmt.Errorf("artifact_url_style for junit_monitor on component %s/%s must be %q or %q, got %q", component.ComponentSlug, component.SubComponentSlug, types.JUnitArtifactStyleGCS, types.JUnitArtifactStyleGCSWeb, component.JUnitMonitor.ArtifactURLStyle)
+			}
+			hr := component.JUnitMonitor.HistoryRuns
+			if hr < 0 {
+				return nil, fmt.Errorf("history_runs for junit_monitor on component %s/%s must be non-negative", component.ComponentSlug, component.SubComponentSlug)
+			}
+			if hr <= 0 {
+				hr = 1
+			}
+			ft := component.JUnitMonitor.FailedRunsThreshold
+			if hr == 1 {
+				_ = ft
+			} else {
+				if ft < 1 {
+					return nil, fmt.Errorf("failed_runs_threshold is required and must be >=1 when history_runs >1 for junit_monitor on component %s/%s", component.ComponentSlug, component.SubComponentSlug)
+				}
+				if ft > hr {
+					return nil, fmt.Errorf("failed_runs_threshold for junit_monitor on component %s/%s must be <= history_runs (%d), got %d", component.ComponentSlug, component.SubComponentSlug, hr, ft)
+				}
 			}
 		}
 	}
@@ -165,7 +192,24 @@ func createProbers(components []types.MonitoringComponent, prometheusClients map
 			if err != nil {
 				componentLogger.WithField("error", err).Fatal("Failed to parse max_age duration")
 			}
-			junitProber := NewJUnitProber(component.ComponentSlug, component.SubComponentSlug, component.JUnitMonitor.GCSBucket, component.JUnitMonitor.JobName, maxAge, component.JUnitMonitor.Severity, &http.Client{Timeout: 30 * time.Second})
+			style := strings.ToLower(strings.TrimSpace(component.JUnitMonitor.ArtifactURLStyle))
+			if style == "" {
+				style = types.JUnitArtifactStyleGCS
+			}
+			hr := component.JUnitMonitor.HistoryRuns
+			if hr <= 0 {
+				hr = 1
+			}
+			junitSt := JUnitProberSettings{
+				ArtifactURLStyle:    style,
+				GCSWebBaseURL:       strings.TrimSpace(component.JUnitMonitor.GCSWebBaseURL),
+				HistoryRuns:         hr,
+				FailedRunsThreshold: component.JUnitMonitor.FailedRunsThreshold,
+			}
+			if hr == 1 {
+				junitSt.FailedRunsThreshold = 1
+			}
+			junitProber := NewJUnitProber(component.ComponentSlug, component.SubComponentSlug, component.JUnitMonitor.GCSBucket, component.JUnitMonitor.JobName, maxAge, component.JUnitMonitor.Severity, junitSt, &http.Client{Timeout: 30 * time.Second})
 			componentLogger.Info("Added JUnit prober for component")
 			probers = append(probers, junitProber)
 		}

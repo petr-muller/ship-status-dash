@@ -235,8 +235,8 @@ func (o *Outage) after(db *gorm.DB, operation OperationType) error {
 type Reason struct {
 	gorm.Model
 	OutageID uint `json:"-" gorm:"column:outage_id;not null;index"`
-	// Type defines the type of monitoring check that was performed
-	// either: prometheus, http, or systemd
+	// Type defines the type of monitoring check that was performed.
+	// Valid values are defined by CheckType: prometheus, http, systemd, or junit.
 	Type CheckType `json:"type"`
 	// Check defines the specific check that was performed
 	// a prometheus check will have a query, an http check will have a url, and a systemd check will have a unit name

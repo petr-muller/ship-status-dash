@@ -11,7 +11,7 @@ This project consists of multiple components:
   - Frontend: React application (`frontend/`)
 - **Component Monitor**: Monitoring service that periodically probes components and reports their status to the dashboard
   - Go service (`cmd/component-monitor`)
-  - Supports HTTP and Prometheus monitoring
+  - Supports HTTP, Prometheus, and JUnit (Prow GCS canary) monitoring; see [`cmd/component-monitor/README.md`](cmd/component-monitor/README.md)
 
 For local development setup, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
@@ -27,6 +27,6 @@ For detailed documentation, see [`cmd/dashboard/README.md`](cmd/dashboard/README
 
 The component-monitor is a service that periodically probes sub-components to detect outages and report their status to the dashboard API.
   - Go service (`cmd/component-monitor`)
-  - Supports HTTP and Prometheus monitoring
+  - Supports HTTP, Prometheus, and JUnit monitoring
 
 For detailed documentation, see [`cmd/component-monitor/README.md`](cmd/component-monitor/README.md).

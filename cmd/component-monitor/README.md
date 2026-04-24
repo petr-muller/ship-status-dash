@@ -4,10 +4,12 @@ The component-monitor is a service that periodically probes sub-components to de
 
 ## Overview
 
-The component-monitor supports two types of monitoring:
+The component-monitor supports these types of monitoring:
 
 1. **HTTP Monitoring**: Probes HTTP endpoints and checks for expected status codes
 2. **Prometheus Monitoring**: Executes Prometheus queries (both instant and range queries) to check component health
+3. **JUnit Monitoring**: Fetches a Prow canary’s JUnit XML from GCS (or the GCSweb URL style) and derives health from that file
+4. **Systemd Monitoring** (if enabled in config): Probes a systemd unit on a host
 
 ## Architecture
 
@@ -17,6 +19,40 @@ The component-monitor runs as a standalone service that:
 - Periodically executes probes at a configured frequency
 - Sends probe results to the dashboard API via HTTP POST requests
 - Does not expose any HTTP endpoints itself (only makes outbound requests)
+
+## JUnit monitor (`junit_monitor`)
+
+Use this for Prow jobs that write a canary JUnit file into `test-platform-results` (or another GCS bucket), under `logs/<job_name>/`.
+
+If omitted, **junit_monitor.severity** defaults to **Degraded**.
+
+**What the prober reads (no build-cluster login):**
+
+1. **`latest-build.txt`** at `logs/<job_name>/` — a single line with the current Prow build id.
+2. **`started.json`** for that id — if the start time is older than `max_age`, the probe reports unhealthy (stale canary), regardless of JUnit.
+3. **`artifacts/junit_canary.xml`** for that id — parsed for total tests and failed `<testcase>` names (only `<failure/>` is treated as a failure in the current implementation).
+
+**Single run (`history_runs: 1`, default):** the latest build (from `latest-build.txt`) is the only JUnit read. Failing = zero total JUnit tests, or any failed testcase. `failed_runs_threshold` is ignored (internally 1).
+
+**History (`history_runs` N > 1):** the prober takes up to **N** recent build ids (GCS list API, merged with `latest-build.txt`, then sorted), fetches JUnit for each, and classifies every run. It then applies **`failed_runs_threshold` (Y) with the same failure pattern** — *not* “Y arbitrary red runs in N”:
+
+- A **failure pattern** is the sorted set of failed testcase `name` values, or a shared bucket for runs with **no JUnit tests** (zero total tests in the sum of suite `tests` attributes).
+- Let **K** = the size of the **largest** group of runs in the last N that share the **identical** pattern.
+- If **K ≥ Y**, the sub-component is unhealthy for this prober. Otherwise it is healthy.
+- So **Y=1** in a window of several runs: any one red run (with its own pattern) gives **K=1** for that pattern, so 1 ≥ 1 → reported unhealthy. **Y=2** requires the **same** pattern on at least two runs (e.g. the same canary test names flaking), not one failure on run A and a different failure on run B.
+
+**Example:**
+
+```yaml
+junit_monitor:
+  job_name: "periodic-build-farm-canary-build11"
+  gcs_bucket: "test-platform-results"  # default if omitted
+  max_age: "2h"                        # from started.json of latest only
+  severity: "Degraded"
+  artifact_url_style: "gcs"            # or "gcsweb" for the app.ci GCSweb host
+  history_runs: 5
+  failed_runs_threshold: 3            # 3+ runs in last 5 must share one failure pattern
+```
 
 ## Configuration
 
@@ -171,7 +207,7 @@ components:
 ## How It Works
 
 1. The component-monitor loads the configuration file and validates all settings
-2. For each configured component, it creates appropriate probers (HTTP or Prometheus)
+2. For each configured component, it creates appropriate probers (HTTP, Prometheus, JUnit, systemd, etc.)
 3. At the configured frequency, it runs all probes concurrently
 4. Probe results are aggregated and sent to the dashboard API via POST to `/api/component-monitor/report` with bearer token authentication
 5. The dashboard API processes the reports and creates/resolves outages accordingly
