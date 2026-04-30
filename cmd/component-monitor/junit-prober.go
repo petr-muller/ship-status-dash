@@ -16,21 +16,16 @@ import (
 	"ship-status-dash/pkg/types"
 )
 
-const defaultGCSBucket = "test-platform-results"
-
 const (
+	defaultGCSBucket      = "test-platform-results"
 	prowObjectLatestBuild = "latest-build.txt"
 	prowObjectStarted     = "started.json"
 	junitProwPath         = "artifacts/junit_canary.xml"
-)
+	maxTextBodyBytes      = 4 * 1024 * 1024
+	defaultGCSWebBase     = types.JUnitDefaultGCSWebBase
 
-const maxTextBodyBytes = 4 * 1024 * 1024
-
-const defaultGCSWebBase = types.JUnitDefaultGCSWebBase
-
-// Grouping for history: runs count toward the threshold when they share the
-// same normalized failure (sorted unique failing test names, or a zero-test run).
-const (
+	// History grouping: runs count toward the threshold when they share the
+	// same normalized failure (sorted unique failing test names, or a zero-test run).
 	junitSignatureZero      = "zero_tests"
 	junitSignatureFailedPfx = "failed:" // + sorted, comma-joined test names
 )
@@ -62,7 +57,9 @@ type JUnitProber struct {
 
 // NewJUnitProber returns a JUnitProber. It uses default bucket, severity, and artifact style when empty,
 // enforces a minimum history of 1, and sets FailedRunsThreshold to 1 when a single run is configured.
+// jobName is trimmed of leading and trailing whitespace before use in URLs and reasons.
 func NewJUnitProber(componentSlug, subComponentSlug, bucket, jobName string, maxAge time.Duration, severity types.Severity, settings JUnitProberSettings, client junitHTTPClient) *JUnitProber {
+	jobName = strings.TrimSpace(jobName)
 	if bucket == "" {
 		bucket = defaultGCSBucket
 	}
@@ -177,10 +174,7 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		return
 	}
 
-	threshold := p.settings.FailedRunsThreshold
-	if threshold < 1 {
-		threshold = 1
-	}
+	threshold := p.settings.FailedRunsThreshold // validated in loadAndValidateConfig when history_runs > 1
 
 	// For each Prow run, the failure signature is the sorted set of failing
 	// test names (or a dedicated zero-tests key). A run counts toward
@@ -201,38 +195,29 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		signatureCount[sig]++
 	}
 
-	bestSig, bestCount := "", 0
+	highestSig, highestCount := "", 0
 	for sig, n := range signatureCount {
-		if n > bestCount {
-			bestCount, bestSig = n, sig
-		} else if n == bestCount && n > 0 && (bestSig == "" || sig < bestSig) {
-			bestSig = sig
+		if n > highestCount {
+			highestCount, highestSig = n, sig
+		} else if n == highestCount && n > 0 && (highestSig == "" || sig < highestSig) {
+			highestSig = sig
 		}
 	}
-	if bestCount < threshold {
-		var reason string
-		switch bestCount {
-		case 0:
-			reason = fmt.Sprintf("junit: last %d run(s) all pass — %s", len(builds), strings.Join(summaries, " | "))
-		default:
-			reason = fmt.Sprintf(
-				"junit: last %d run(s) under threshold: at most %d run(s) share the same failure pattern (need %d) — %s",
-				len(builds), bestCount, threshold, strings.Join(summaries, " | "),
-			)
-		}
+	if highestCount < threshold {
+		// Healthy: omit Reasons — mergeStatuses strips them for Healthy in the report anyway.
 		results <- ProbeResult{
 			ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
 				ComponentSlug:    p.componentSlug,
 				SubComponentSlug: p.subComponentSlug,
 				Status:           types.StatusHealthy,
-				Reasons:          []types.Reason{{Type: types.CheckTypeJUnit, Check: p.jobName, Results: reason}},
+				Reasons:          nil,
 			},
 		}
 		return
 	}
 	reason := fmt.Sprintf(
 		"junit: %d of the last %d run(s) share the same failure pattern: %s (threshold %d) — %s",
-		bestCount, len(builds), formatJunitSignatureShort(bestSig), threshold, strings.Join(summaries, " | "),
+		highestCount, len(builds), formatJunitSignatureShort(highestSig), threshold, strings.Join(summaries, " | "),
 	)
 	results <- ProbeResult{
 		ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
@@ -320,7 +305,7 @@ type gcsListObjectResponse struct {
 }
 
 func buildIDFromPrefixPath(prefix, jobName string) (string, bool) {
-	trim := strings.Trim(prefix, "/")
+	trim := strings.TrimLeft(prefix, "/")
 	expected := "logs/" + jobName + "/"
 	if !strings.HasPrefix(trim, expected) {
 		return "", false
@@ -394,7 +379,7 @@ func aggregateJunitFromSuites(suites []junitSuite) (total int, failedSorted []st
 	for _, s := range suites {
 		total += s.Tests
 		for _, tc := range s.TestCases {
-			if tc.Failure == nil {
+			if tc.Failure == nil && tc.Error == nil {
 				continue
 			}
 			if tc.Name != "" {
@@ -419,11 +404,12 @@ func junitUnhealthy(total int, failed []string) bool {
 }
 
 // junitFailureSignature is a key for the same failure "reason" across runs. Only call when junitUnhealthy.
-func junitFailureSignature(total int, failed []string) string {
-	if total == 0 {
+// totalJUnitCases is the sum of suite tests attributes from JUnit XML (same as aggregateJunitFromSuites).
+func junitFailureSignature(totalJUnitCases int, failed []string) string {
+	if totalJUnitCases == 0 {
 		return junitSignatureZero
 	}
-	// Unhealthy, total>0, non-empty failed (sorted unique) per aggregateJunitFromSuites.
+	// Unhealthy, totalJUnitCases>0, non-empty failed (sorted unique) per aggregateJunitFromSuites.
 	if len(failed) == 0 {
 		return ""
 	}
@@ -470,28 +456,33 @@ func formatJunitBuildSummary(total int, failed []string) string {
 
 func (p *JUnitProber) makeStatusFromAggregates(buildID string, total int, failed []string) ProbeResult {
 	var status types.Status
-	var reason string
+	var reasons []types.Reason
 	switch {
 	case total == 0:
 		status = p.severity.ToStatus()
-		reason = fmt.Sprintf("build %s: zero tests found", buildID)
+		reasons = []types.Reason{{
+			Type:    types.CheckTypeJUnit,
+			Check:   p.jobName,
+			Results: fmt.Sprintf("build %s: zero tests found", buildID),
+		}}
 	case len(failed) == 0:
 		status = types.StatusHealthy
-		reason = fmt.Sprintf("build %s: all %d tests passed", buildID, total)
+		// Omit Reasons for Healthy — mergeStatuses strips them in the report anyway.
+		reasons = nil
 	default:
 		status = p.severity.ToStatus()
-		reason = fmt.Sprintf("build %s: %d/%d tests failed: %s", buildID, len(failed), total, strings.Join(failed, ", "))
+		reasons = []types.Reason{{
+			Type:    types.CheckTypeJUnit,
+			Check:   p.jobName,
+			Results: fmt.Sprintf("build %s: %d/%d tests failed: %s", buildID, len(failed), total, strings.Join(failed, ", ")),
+		}}
 	}
 	return ProbeResult{
 		ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
 			ComponentSlug:    p.componentSlug,
 			SubComponentSlug: p.subComponentSlug,
 			Status:           status,
-			Reasons: []types.Reason{{
-				Type:    types.CheckTypeJUnit,
-				Check:   p.jobName,
-				Results: reason,
-			}},
+			Reasons:          reasons,
 		},
 	}
 }
@@ -532,6 +523,7 @@ type junitSuite struct {
 type junitCase struct {
 	Name    string    `xml:"name,attr"`
 	Failure *struct{} `xml:"failure"`
+	Error   *struct{} `xml:"error"`
 }
 
 type prowStarted struct {

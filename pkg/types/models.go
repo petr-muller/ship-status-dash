@@ -238,8 +238,8 @@ type Reason struct {
 	// Type defines the type of monitoring check that was performed.
 	// Valid values are defined by CheckType: prometheus, http, systemd, or junit.
 	Type CheckType `json:"type"`
-	// Check defines the specific check that was performed
-	// a prometheus check will have a query, an http check will have a url, and a systemd check will have a unit name
+	// Check defines the specific check that was performed:
+	// prometheus query, HTTP URL, systemd unit name, or junit Prow job name.
 	Check string `json:"check"`
 	// Results summarizes the results of the check
 	Results string `json:"results"`

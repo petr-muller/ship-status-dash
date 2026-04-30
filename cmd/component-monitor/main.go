@@ -134,10 +134,8 @@ func loadAndValidateConfig(log *logrus.Logger, configPath string, kubeconfigDir 
 			if hr <= 0 {
 				hr = 1
 			}
-			ft := component.JUnitMonitor.FailedRunsThreshold
-			if hr == 1 {
-				_ = ft
-			} else {
+			if hr > 1 {
+				ft := component.JUnitMonitor.FailedRunsThreshold
 				if ft < 1 {
 					return nil, fmt.Errorf("failed_runs_threshold is required and must be >=1 when history_runs >1 for junit_monitor on component %s/%s", component.ComponentSlug, component.SubComponentSlug)
 				}
@@ -200,16 +198,18 @@ func createProbers(components []types.MonitoringComponent, prometheusClients map
 			if hr <= 0 {
 				hr = 1
 			}
+			failedRunsThreshold := component.JUnitMonitor.FailedRunsThreshold
+			if hr == 1 {
+				failedRunsThreshold = 1
+			}
 			junitSt := JUnitProberSettings{
 				ArtifactURLStyle:    style,
 				GCSWebBaseURL:       strings.TrimSpace(component.JUnitMonitor.GCSWebBaseURL),
 				HistoryRuns:         hr,
-				FailedRunsThreshold: component.JUnitMonitor.FailedRunsThreshold,
+				FailedRunsThreshold: failedRunsThreshold,
 			}
-			if hr == 1 {
-				junitSt.FailedRunsThreshold = 1
-			}
-			junitProber := NewJUnitProber(component.ComponentSlug, component.SubComponentSlug, component.JUnitMonitor.GCSBucket, component.JUnitMonitor.JobName, maxAge, component.JUnitMonitor.Severity, junitSt, &http.Client{Timeout: 30 * time.Second})
+			junitJobName := strings.TrimSpace(component.JUnitMonitor.JobName)
+			junitProber := NewJUnitProber(component.ComponentSlug, component.SubComponentSlug, component.JUnitMonitor.GCSBucket, junitJobName, maxAge, component.JUnitMonitor.Severity, junitSt, &http.Client{Timeout: 30 * time.Second})
 			componentLogger.Info("Added JUnit prober for component")
 			probers = append(probers, junitProber)
 		}

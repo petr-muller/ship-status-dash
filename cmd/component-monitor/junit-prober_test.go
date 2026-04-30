@@ -74,6 +74,25 @@ func readJUnitFixture(t *testing.T, name string) string {
 	return string(b)
 }
 
+func TestAggregateJunitFromSuites_errorElement(t *testing.T) {
+	const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
+<testsuite tests="1">
+  <testcase name="boom" classname="build-farm-canary"><error message="oops"/></testcase>
+</testsuite>`
+	suites, err := parseSuitesFromJunitBody(xmlBody)
+	if err != nil {
+		t.Fatalf("parseSuitesFromJunitBody: %v", err)
+	}
+	total, failed := aggregateJunitFromSuites(suites)
+	if total != 1 {
+		t.Errorf("total = %d, want 1", total)
+	}
+	want := []string{"boom"}
+	if diff := cmp.Diff(want, failed); diff != "" {
+		t.Errorf("failed (-want +got):\n%s", diff)
+	}
+}
+
 func TestProwLogObjectURL(t *testing.T) {
 	job := "periodic-ci-foo"
 	bucket := "test-platform-results"
@@ -149,11 +168,7 @@ func TestJUnitProber_Probe(t *testing.T) {
 				ComponentSlug:    testComponentSlug,
 				SubComponentSlug: testSubComponentSlug,
 				Status:           types.StatusHealthy,
-				Reasons: []types.Reason{{
-					Type:    types.CheckTypeJUnit,
-					Check:   job,
-					Results: "build 123: all 4 tests passed",
-				}},
+				Reasons:          nil,
 			},
 		},
 		{
@@ -224,11 +239,7 @@ func TestJUnitProber_Probe(t *testing.T) {
 				ComponentSlug:    testComponentSlug,
 				SubComponentSlug: testSubComponentSlug,
 				Status:           types.StatusHealthy,
-				Reasons: []types.Reason{{
-					Type:    types.CheckTypeJUnit,
-					Check:   job,
-					Results: "build 456: all 4 tests passed",
-				}},
+				Reasons:          nil,
 			},
 		},
 		{
@@ -263,11 +274,7 @@ func TestJUnitProber_Probe(t *testing.T) {
 				ComponentSlug:    testComponentSlug,
 				SubComponentSlug: testSubComponentSlug,
 				Status:           types.StatusHealthy,
-				Reasons: []types.Reason{{
-					Type:    types.CheckTypeJUnit,
-					Check:   job,
-					Results: "build 123: all 4 tests passed",
-				}},
+				Reasons:          nil,
 			},
 		},
 		{
@@ -443,7 +450,7 @@ func TestJUnitProber_Probe_history_healthy(t *testing.T) {
 		t.Fatalf("unexpected: %v", res.Error)
 	}
 	if res.Status != types.StatusHealthy {
-		t.Fatalf("want healthy, got %s", res.Reasons[0].Results)
+		t.Fatalf("want healthy, got status %s", res.Status)
 	}
 }
 
@@ -487,7 +494,7 @@ func TestJUnitProber_Probe_history_different_signatures_healthy(t *testing.T) {
 		t.Fatalf("unexpected: %v", res.Error)
 	}
 	if res.Status != types.StatusHealthy {
-		t.Fatalf("want healthy when failure patterns differ, got %s: %s", res.Status, res.Reasons[0].Results)
+		t.Fatalf("want healthy when failure patterns differ, got status %s", res.Status)
 	}
 }
 
