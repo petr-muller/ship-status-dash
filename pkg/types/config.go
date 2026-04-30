@@ -85,6 +85,8 @@ type MonitoringComponent struct {
 	HTTPMonitor *HTTPMonitor `json:"http_monitor,omitempty" yaml:"http_monitor,omitempty"`
 	// SystemdMonitor is the configuration for the systemd unit monitor
 	SystemdMonitor *SystemdMonitor `json:"systemd_monitor,omitempty" yaml:"systemd_monitor,omitempty"`
+	// JUnitMonitor configures Prow GCS JUnit probing when set (optional).
+	JUnitMonitor *JUnitMonitor `json:"junit_monitor,omitempty" yaml:"junit_monitor,omitempty"`
 }
 
 type PrometheusMonitor struct {
@@ -138,6 +140,46 @@ type SystemdMonitor struct {
 	// Severity is the severity of the outage that will be created if the unit is not active.
 	// If not provided, the severity will default to Down.
 	Severity Severity `json:"severity,omitempty" yaml:"severity,omitempty"`
+}
+
+const (
+	// JUnitArtifactStyleGCS uses the public GCS object URL.
+	JUnitArtifactStyleGCS = "gcs"
+	// JUnitArtifactStyleGCSWeb uses the GCSweb proxy (see JUnitDefaultGCSWebBase).
+	JUnitArtifactStyleGCSWeb = "gcsweb"
+)
+
+// JUnitDefaultGCSWebBase is the default GCSweb host for artifact links (aligns with openshift/release ship-status and job report URLs).
+const JUnitDefaultGCSWebBase = "https://gcsweb-ci.apps.ci.l2s4.p1.openshiftapps.com"
+
+// JUnitMonitor configures reading JUnit XML that Prow uploads to GCS for a job (under logs/<job_name>/,
+// e.g. artifacts/junit_canary.xml via latest-build.txt and started.json for staleness—see component-monitor docs).
+//
+// With history_runs 1 (default), only that latest build is evaluated for pass/fail.
+// With history_runs N > 1 and failed_runs_threshold Y, the monitor evaluates up to N recent builds and
+// reports unhealthy only when at least Y of those runs share the same failure pattern (the same set of
+// failed testcase names, or runs all bucketed as zero JUnit tests)—not merely “any Y failing runs out of N,”
+// which avoids noisy alerts from unrelated flake patterns.
+type JUnitMonitor struct {
+	// GCSBucket is the Prow GCS bucket name. If not provided, test-platform-results is used.
+	GCSBucket string `json:"gcs_bucket,omitempty" yaml:"gcs_bucket,omitempty"`
+	// JobName is the Prow job name (under logs/ in the bucket).
+	JobName string `json:"job_name" yaml:"job_name"`
+	// MaxAge is the maximum age of the build referenced by latest-build.txt before the probe reports unhealthy. Must be a valid Go duration.
+	MaxAge string `json:"max_age" yaml:"max_age"`
+	// Severity is the severity to report on failure or a stale build. If not provided, the severity will default to Degraded.
+	Severity Severity `json:"severity,omitempty" yaml:"severity,omitempty"`
+	// ArtifactURLStyle selects gcs (direct GCS URL) or gcsweb (GCSweb proxy URL). If not provided, gcs is used.
+	ArtifactURLStyle string `json:"artifact_url_style,omitempty" yaml:"artifact_url_style,omitempty"`
+	// GCSWebBaseURL is the GCSweb origin to use when ArtifactURLStyle is gcsweb. If not provided, JUnitDefaultGCSWebBase is used.
+	GCSWebBaseURL string `json:"gcsweb_base_url,omitempty" yaml:"gcsweb_base_url,omitempty"`
+	// HistoryRuns is the number of recent Prow build IDs to evaluate. If 0, 1 is used. When greater than 1, FailedRunsThreshold and GCS list responses apply; staleness (MaxAge) still uses only the latest build from latest-build.txt.
+	HistoryRuns int `json:"history_runs,omitempty" yaml:"history_runs,omitempty"`
+	// FailedRunsThreshold (Y) is used when HistoryRuns (N) is greater than 1. Unhealthy if the *largest* group
+	// of runs that share the same failure pattern has size at least Y. A pattern is the sorted set of failed
+	// testcase names, or a shared bucket for zero total JUnit tests. It is not "Y arbitrary red runs in N."
+	// Y must be between 1 and N (inclusive). When HistoryRuns is 1, the field is ignored.
+	FailedRunsThreshold int `json:"failed_runs_threshold,omitempty" yaml:"failed_runs_threshold,omitempty"`
 }
 
 type HTTPMonitor struct {
