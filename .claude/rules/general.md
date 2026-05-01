@@ -1,0 +1,20 @@
+---
+paths:
+  - "**"
+---
+
+**Ship Status Dashboard** is a status monitoring and availability tracking system for OpenShift CI components. It provides:
+
+* Real-time component status and outage tracking
+* Automated monitoring via HTTP probes, Prometheus queries, and systemd checks
+* Slack integration for outage notifications
+* Audit logging for all outage modifications
+
+The system consists of:
+
+* A **Go-based API backend** with dual-ingress auth (public + OAuth-protected routes)
+* A **React/Vite/Material-UI frontend** (located in `frontend/`)
+* A **component-monitor** service that probes components and reports to the dashboard
+* **PostgreSQL** for data storage
+
+Favor clarity and maintainability over cleverness. Comments should be minimal, helpful, and explain the "why" not the "what".

@@ -1,0 +1,6 @@
+name: ship-status-dash
+version: 1.0.0
+description: CI component status dashboard and availability tracker for OpenShift
+target: [claude, cursor, gemini, opencode]
+
+dependencies: {}

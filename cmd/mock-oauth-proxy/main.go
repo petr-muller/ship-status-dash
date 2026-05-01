@@ -202,8 +202,7 @@ func basicAuthHandler(config *Config, upstreamURL *url.URL, hmacAuth hmacauth.Hm
 
 		// Authenticate request
 		authHeader := r.Header.Get("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
+		if token, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
 			sa, err := authenticateServiceAccount(token, config)
 			if err != nil {
 				requestLogger.WithField("error", err).Warn("Service account authentication failed")
@@ -320,7 +319,10 @@ func main() {
 
 	hmacAuth := hmacauth.NewHmacAuth(crypto.SHA256, hmacSecret, auth.GAPSignatureHeader, auth.OAuthSignatureHeaders)
 
+	unauthProxy := httputil.NewSingleHostReverseProxy(upstreamURL)
+
 	router := mux.NewRouter()
+	router.Handle("/health", unauthProxy)
 	router.Handle("/oauth/start", oauthStartHandler(config, logger))
 	router.Handle("/oauth/callback", oauthCallbackHandler())
 	router.PathPrefix("/").Handler(basicAuthHandler(config, upstreamURL, hmacAuth, logger))
