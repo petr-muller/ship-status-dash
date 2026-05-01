@@ -14,7 +14,6 @@ if ! podman start ship-status-postgres 2>/dev/null; then
         --network ship-status-net \
         -e POSTGRES_PASSWORD=password \
         -e POSTGRES_DB=ship_status \
-        -e POSTGRES_HOST_AUTH_METHOD=trust \
         -p 127.0.0.1:5433:5432 \
         quay.io/enterprisedb/postgresql \
         -c listen_addresses='*'

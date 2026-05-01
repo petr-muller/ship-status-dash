@@ -16,45 +16,49 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 LOG_DIR="${SHIP_STATUS_LOG_DIR:-/tmp}"
+mkdir -p "$LOG_DIR"
 PROMETHEUS_CONTAINER_NAME="prometheus-local-dev"
 DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:8443}"
 PROMETHEUS_DATA_DIR="${PROMETHEUS_DATA_DIR:-/tmp/prometheus-local-dev}"
 
-if [ "$BACKGROUND" = false ]; then
-  cleanup() {
-    set +e
-    echo ""
-    echo "Cleaning up..."
-    if [ ! -z "$MOCK_COMPONENT_PID" ]; then
-      kill -TERM $MOCK_COMPONENT_PID 2>/dev/null || true
-      sleep 1
-      kill -KILL $MOCK_COMPONENT_PID 2>/dev/null || true
+EXIT_CODE=0
+cleanup() {
+  EXIT_CODE="${EXIT_CODE:-$?}"
+  set +e
+  if [ "$BACKGROUND" = true ]; then
+    exit "$EXIT_CODE"
+  fi
+  echo ""
+  echo "Cleaning up..."
+  if [ ! -z "$MOCK_COMPONENT_PID" ]; then
+    kill -TERM $MOCK_COMPONENT_PID 2>/dev/null || true
+    sleep 1
+    kill -KILL $MOCK_COMPONENT_PID 2>/dev/null || true
+  fi
+  if [ ! -z "$PROMETHEUS_PID" ]; then
+    kill -TERM $PROMETHEUS_PID 2>/dev/null || true
+    sleep 1
+    kill -KILL $PROMETHEUS_PID 2>/dev/null || true
+  fi
+  if [ "$NATIVE_PROMETHEUS" = false ]; then
+    if podman ps -a --format "{{.Names}}" | grep -q "^${PROMETHEUS_CONTAINER_NAME}$"; then
+      podman stop "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
+      podman rm "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
     fi
-    if [ ! -z "$PROMETHEUS_PID" ]; then
-      kill -TERM $PROMETHEUS_PID 2>/dev/null || true
-      sleep 1
-      kill -KILL $PROMETHEUS_PID 2>/dev/null || true
-    fi
-    if [ "$NATIVE_PROMETHEUS" = false ]; then
-      if podman ps -a --format "{{.Names}}" | grep -q "^${PROMETHEUS_CONTAINER_NAME}$"; then
-        podman stop "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
-        podman rm "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
-      fi
-    fi
-    if [ ! -z "$COMPONENT_MONITOR_PID" ]; then
-      kill -TERM $COMPONENT_MONITOR_PID 2>/dev/null || true
-      sleep 1
-      kill -KILL $COMPONENT_MONITOR_PID 2>/dev/null || true
-    fi
-    if [ ! -z "$COMPONENT_MONITOR_TOKEN" ] && [ -f "$COMPONENT_MONITOR_TOKEN" ]; then
-      rm -f "$COMPONENT_MONITOR_TOKEN"
-    fi
-    echo "Cleanup complete"
-    exit 0
-  }
+  fi
+  if [ ! -z "$COMPONENT_MONITOR_PID" ]; then
+    kill -TERM $COMPONENT_MONITOR_PID 2>/dev/null || true
+    sleep 1
+    kill -KILL $COMPONENT_MONITOR_PID 2>/dev/null || true
+  fi
+  if [ ! -z "$COMPONENT_MONITOR_TOKEN" ] && [ -f "$COMPONENT_MONITOR_TOKEN" ]; then
+    rm -f "$COMPONENT_MONITOR_TOKEN"
+  fi
+  echo "Cleanup complete"
+  exit "$EXIT_CODE"
+}
 
-  trap cleanup EXIT
-fi
+trap cleanup EXIT
 
 echo "Starting mock-monitored-component on port 8081..."
 MOCK_COMPONENT_LOG="$LOG_DIR/mock-component-local-dev.log"

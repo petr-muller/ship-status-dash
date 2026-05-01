@@ -12,7 +12,7 @@ go run ./cmd/migrate --dsn "$SHIP_STATUS_DSN"
 
 If `SHIP_STATUS_DSN` is not set, it uses the dev default:
 
-```
+```text
 postgres://postgres:password@localhost:5433/ship_status?sslmode=disable
 ```
 

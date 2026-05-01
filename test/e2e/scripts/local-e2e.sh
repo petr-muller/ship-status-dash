@@ -335,6 +335,8 @@ done
 PROMETHEUS_CONFIG_PATH="$(cd "$(dirname "$0")" && pwd)/prometheus.yml"
 PROMETHEUS_CONFIG_TMP=$(mktemp)
 
+PROMETHEUS_LOG="/tmp/prometheus-e2e.log"
+
 if [ "$USE_NATIVE_PROMETHEUS" = true ]; then
   echo "Starting Prometheus (native) on port $PROMETHEUS_PORT..."
   NATIVE_PROMETHEUS_DATA=$(mktemp -d)
@@ -348,11 +350,22 @@ if [ "$USE_NATIVE_PROMETHEUS" = true ]; then
     --storage.tsdb.path="$NATIVE_PROMETHEUS_DATA" \
     --web.listen-address=":$PROMETHEUS_PORT" \
     --web.enable-lifecycle \
-    > /dev/null 2>&1 &
+    > "$PROMETHEUS_LOG" 2>&1 &
   PROMETHEUS_PID=$!
 else
   echo "Starting Prometheus in container on port $PROMETHEUS_PORT..."
-  MOCK_MONITORED_COMPONENT_TARGET="host.containers.internal:${MOCK_MONITORED_COMPONENT_PORT}"
+
+  # Detect Docker vs Podman for correct host alias
+  DOCKER_BASENAME=$(basename "$DOCKER")
+  if [ "$DOCKER_BASENAME" = "docker" ]; then
+    CONTAINER_HOST="host.docker.internal"
+    HOST_FLAG="--add-host=host.docker.internal:host-gateway"
+  else
+    CONTAINER_HOST="host.containers.internal"
+    HOST_FLAG=""
+  fi
+
+  MOCK_MONITORED_COMPONENT_TARGET="${CONTAINER_HOST}:${MOCK_MONITORED_COMPONENT_PORT}"
   export MOCK_MONITORED_COMPONENT_TARGET
   envsubst < "$PROMETHEUS_CONFIG_PATH" > "$PROMETHEUS_CONFIG_TMP"
 
@@ -362,6 +375,7 @@ else
 
   $DOCKER run -d \
     --name "$PROMETHEUS_CONTAINER_NAME" \
+    $HOST_FLAG \
     -p $PROMETHEUS_PORT:9090 \
     -v "$PROMETHEUS_CONFIG_TMP:/etc/prometheus/prometheus.yml:ro" \
     quay.io/prometheus/prometheus:latest \
@@ -382,7 +396,8 @@ for i in {1..60}; do
   if [ $i -eq 60 ]; then
     echo "Prometheus failed to complete initial scrape within 60 seconds"
     if [ "$USE_NATIVE_PROMETHEUS" = true ]; then
-      echo "Prometheus PID: $PROMETHEUS_PID"
+      echo "=== Prometheus Log (last 30 lines) ==="
+      tail -n 30 "$PROMETHEUS_LOG" 2>/dev/null || echo "No log found"
     else
       $DOCKER logs "$PROMETHEUS_CONTAINER_NAME" 2>/dev/null || true
     fi

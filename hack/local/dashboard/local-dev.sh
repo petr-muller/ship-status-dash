@@ -23,6 +23,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 LOG_DIR="${SHIP_STATUS_LOG_DIR:-/tmp}"
+mkdir -p "$LOG_DIR"
 
 kill_processes_on_port() {
   local port=$1
@@ -71,19 +72,19 @@ if [ "$BACKGROUND" = false ]; then
   trap cleanup EXIT
 fi
 
+DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"
+PROXY_PORT="${PROXY_PORT:-8443}"
+
 echo "Checking if ports are available..."
-if lsof -i :8080 > /dev/null 2>&1; then
-  echo "Error: Port 8080 is already in use"
+if lsof -i :$DASHBOARD_PORT > /dev/null 2>&1; then
+  echo "Error: Port $DASHBOARD_PORT is already in use"
   exit 1
 fi
 
-if lsof -i :8443 > /dev/null 2>&1; then
-  echo "Error: Port 8443 is already in use"
+if lsof -i :$PROXY_PORT > /dev/null 2>&1; then
+  echo "Error: Port $PROXY_PORT is already in use"
   exit 1
 fi
-
-DASHBOARD_PORT=8080
-PROXY_PORT=8443
 
 echo "Running database migrations..."
 if ! go run ./cmd/migrate --dsn "$DSN"; then

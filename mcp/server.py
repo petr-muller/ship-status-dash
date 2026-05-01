@@ -219,13 +219,18 @@ def _run_script_background(
         return f"{label} failed (exit {r.returncode}). log: {log_path}\n--- tail ---\n{tail}"
 
     if ready_url:
+        ready = False
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             try:
                 urllib.request.urlopen(ready_url, timeout=2)
+                ready = True
                 break
             except Exception:
                 time.sleep(1)
+        if not ready:
+            tail = _tail_file(log_path, 40)
+            return f"{label} started but readiness probe failed ({ready_url}). log: {log_path}\n--- tail ---\n{tail}"
 
     return f"{label} started. log: {log_path}\n{output}"
 
@@ -326,6 +331,10 @@ def dashboard_serve(
         args=[dsn],
         log_path=log_path,
         ready_url=f"http://localhost:{dashboard_port}/health",
+        env_extra={
+            "DASHBOARD_PORT": str(dashboard_port),
+            "PROXY_PORT": str(proxy_port),
+        },
     )
 
 

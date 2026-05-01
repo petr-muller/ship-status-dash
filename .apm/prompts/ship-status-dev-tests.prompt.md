@@ -6,8 +6,8 @@ description: "Run lint and unit tests (full local CI suite, excluding e2e)"
 
 Use the **`run_tests`** MCP tool (server: **`ship-status-dev`**). This runs two steps in order, stopping if any step fails:
 
-1. **Lint** — `CI=true make lint`
-   - `CI=true` makes `hack/go-lint.sh` use the locally installed `golangci-lint` instead of spawning a container.
+1. **Lint** — `make lint`
+   - `hack/go-lint.sh` uses the locally installed `golangci-lint` if available, otherwise falls back to a container.
 
 2. **Unit tests** — `make test`
    - Runs Go tests via gotestsum.

@@ -7,4 +7,4 @@ description: Run Go and frontend linting
 Run linting for the project:
 
 1. **Go lint**: `make lint`
-2. **Frontend lint**: `cd frontend && npx eslint . --fix`
+2. **Frontend lint + format**: `cd frontend && npx eslint . --fix && npx prettier --write .`

@@ -1,2 +1,2 @@
 description = "Run Go and frontend linting"
-prompt = "# Ship Status dev — lint\n\nRun linting for the project:\n\n1. **Go lint**: `make lint`\n2. **Frontend lint**: `cd frontend && npx eslint . --fix`"
+prompt = "# Ship Status dev — lint\n\nRun linting for the project:\n\n1. **Go lint**: `make lint`\n2. **Frontend lint + format**: `cd frontend && npx eslint . --fix && npx prettier --write .`"
