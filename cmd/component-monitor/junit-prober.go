@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -20,6 +21,7 @@ const (
 	defaultGCSBucket      = "test-platform-results"
 	prowObjectLatestBuild = "latest-build.txt"
 	prowObjectStarted     = "started.json"
+	prowObjectFinished    = "finished.json"
 	junitProwPath         = "artifacts/junit_canary.xml"
 	maxTextBodyBytes      = 4 * 1024 * 1024
 	defaultGCSWebBase     = types.JUnitDefaultGCSWebBase
@@ -29,6 +31,15 @@ const (
 	junitSignatureZero      = "zero_tests"
 	junitSignatureFailedPfx = "failed:" // + sorted, comma-joined test names
 )
+
+type httpStatusError struct {
+	StatusCode int
+	URL        string
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("HTTP %d from %s", e.StatusCode, e.URL)
+}
 
 // junitHTTPClient is the HTTP client used to GET Prow and GCS resources. *http.Client implements it.
 type junitHTTPClient interface {
@@ -115,6 +126,51 @@ func (p *JUnitProber) formatErrorResult(err error) ProbeResult {
 	}
 }
 
+// checkBuildStaleness fetches started.json for the given build and checks
+// whether it exceeds maxAge. Returns a non-nil *ProbeResult when the build
+// is stale; returns (nil, nil) when fresh; returns (nil, err) on fetch/parse
+// failures.
+func (p *JUnitProber) checkBuildStaleness(ctx context.Context, buildID string) (*ProbeResult, error) {
+	startedBody, err := p.fetchText(ctx, p.prowLogObjectURL(buildID, prowObjectStarted))
+	if err != nil {
+		return nil, fmt.Errorf("fetching started.json for build %s: %w", buildID, err)
+	}
+	var started prowStarted
+	if err := json.Unmarshal([]byte(startedBody), &started); err != nil {
+		return nil, fmt.Errorf("parsing started.json for build %s: %w", buildID, err)
+	}
+	if started.Timestamp <= 0 {
+		return nil, fmt.Errorf("invalid or missing timestamp in started.json for build %s", buildID)
+	}
+	if age := time.Since(time.Unix(started.Timestamp, 0)); age > p.maxAge {
+		return &ProbeResult{
+			ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
+				ComponentSlug:    p.componentSlug,
+				SubComponentSlug: p.subComponentSlug,
+				Status:           p.severity.ToStatus(),
+				Reasons: []types.Reason{{
+					Type:    types.CheckTypeJUnit,
+					Check:   p.jobName,
+					Results: fmt.Sprintf("latest build %s started %s ago (max age %s)", buildID, age.Round(time.Minute), p.maxAge),
+				}},
+			},
+		}, nil
+	}
+	return nil, nil
+}
+
+func (p *JUnitProber) isBuildFinished(ctx context.Context, buildID string) (bool, error) {
+	_, err := p.fetchText(ctx, p.prowLogObjectURL(buildID, prowObjectFinished))
+	if err == nil {
+		return true, nil
+	}
+	var httpErr *httpStatusError
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, err
+}
+
 func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 	latest, err := p.fetchText(ctx, p.prowLogObjectURL(prowObjectLatestBuild))
 	if err != nil {
@@ -127,36 +183,41 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		return
 	}
 
-	startedBody, err := p.fetchText(ctx, p.prowLogObjectURL(latest, prowObjectStarted))
+	staleResult, err := p.checkBuildStaleness(ctx, latest)
 	if err != nil {
-		results <- p.formatErrorResult(fmt.Errorf("fetching started.json for build %s: %w", latest, err))
+		results <- p.formatErrorResult(err)
+		return
+	}
+	if staleResult != nil {
+		results <- *staleResult
 		return
 	}
 
-	var started prowStarted
-	if err := json.Unmarshal([]byte(startedBody), &started); err != nil {
-		results <- p.formatErrorResult(fmt.Errorf("parsing started.json for build %s: %w", latest, err))
+	// If the latest build hasn't finished yet, fall back to the previous
+	// completed build so we don't error on missing artifacts.
+	unfinishedBuild := ""
+	finished, finErr := p.isBuildFinished(ctx, latest)
+	if finErr != nil {
+		results <- p.formatErrorResult(fmt.Errorf("checking finished.json for build %s: %w", latest, finErr))
 		return
 	}
-	if started.Timestamp <= 0 {
-		results <- p.formatErrorResult(fmt.Errorf("invalid or missing timestamp in started.json for build %s", latest))
-		return
-	}
-
-	if age := time.Since(time.Unix(started.Timestamp, 0)); age > p.maxAge {
-		results <- ProbeResult{
-			ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
-				ComponentSlug:    p.componentSlug,
-				SubComponentSlug: p.subComponentSlug,
-				Status:           p.severity.ToStatus(),
-				Reasons: []types.Reason{{
-					Type:    types.CheckTypeJUnit,
-					Check:   p.jobName,
-					Results: fmt.Sprintf("latest build %s started %s ago (max age %s)", latest, age.Round(time.Minute), p.maxAge),
-				}},
-			},
+	if !finished {
+		unfinishedBuild = latest
+		prevID, findErr := p.findPreviousBuildID(ctx, latest)
+		if findErr != nil {
+			results <- p.formatErrorResult(fmt.Errorf("latest build %s not finished and %w", latest, findErr))
+			return
 		}
-		return
+		staleResult, err = p.checkBuildStaleness(ctx, prevID)
+		if err != nil {
+			results <- p.formatErrorResult(err)
+			return
+		}
+		if staleResult != nil {
+			results <- *staleResult
+			return
+		}
+		latest = prevID
 	}
 
 	builds, err := p.resolveBuildIDsToEvaluate(ctx, latest)
@@ -164,6 +225,18 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		results <- p.formatErrorResult(err)
 		return
 	}
+
+	// Exclude the unfinished build if it appeared in the GCS listing.
+	if unfinishedBuild != "" {
+		filtered := builds[:0]
+		for _, b := range builds {
+			if b != unfinishedBuild {
+				filtered = append(filtered, b)
+			}
+		}
+		builds = filtered
+	}
+
 	if p.settings.HistoryRuns == 1 {
 		r, perr := p.probeJunitForBuildID(ctx, builds[0])
 		if perr != nil {
@@ -252,6 +325,28 @@ func (p *JUnitProber) resolveBuildIDsToEvaluate(ctx context.Context, latestFromF
 		return all, nil
 	}
 	return all[:n], nil
+}
+
+func (p *JUnitProber) findPreviousBuildID(ctx context.Context, currentBuildID string) (string, error) {
+	ids, err := p.listBuildIDPrefixes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("listing builds for fallback: %w", err)
+	}
+	seen := map[string]struct{}{currentBuildID: {}}
+	for _, id := range ids {
+		seen[id] = struct{}{}
+	}
+	all := make([]string, 0, len(seen))
+	for id := range seen {
+		all = append(all, id)
+	}
+	sortBuildIDsDesc(all)
+	for i, id := range all {
+		if id == currentBuildID && i+1 < len(all) {
+			return all[i+1], nil
+		}
+	}
+	return "", fmt.Errorf("no previous build found before %s", currentBuildID)
 }
 
 func (p *JUnitProber) listBuildIDPrefixes(ctx context.Context) ([]string, error) {
@@ -499,7 +594,7 @@ func (p *JUnitProber) fetchText(ctx context.Context, url string) (string, error)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return "", fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+		return "", &httpStatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTextBodyBytes))
 	if err != nil {
