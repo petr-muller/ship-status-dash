@@ -465,6 +465,15 @@ func TestJUnitProber_Probe_fallback(t *testing.T) {
 			},
 			expectedError: true,
 		},
+		{
+			name: "finished.json 500 propagates error instead of falling back",
+			responses: map[string]mockHTTPResponse{
+				latestURL:      {body: latestBuild},
+				startedLatest:  {body: recentStarted()},
+				finishedLatest: {statusCode: 500, body: "internal server error"},
+			},
+			expectedError: true,
+		},
 	}
 
 	for _, tt := range tests {

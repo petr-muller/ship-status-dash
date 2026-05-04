@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -30,6 +31,15 @@ const (
 	junitSignatureZero      = "zero_tests"
 	junitSignatureFailedPfx = "failed:" // + sorted, comma-joined test names
 )
+
+type httpStatusError struct {
+	StatusCode int
+	URL        string
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("HTTP %d from %s", e.StatusCode, e.URL)
+}
 
 // junitHTTPClient is the HTTP client used to GET Prow and GCS resources. *http.Client implements it.
 type junitHTTPClient interface {
@@ -149,9 +159,16 @@ func (p *JUnitProber) checkBuildStaleness(ctx context.Context, buildID string) (
 	return nil, nil
 }
 
-func (p *JUnitProber) isBuildFinished(ctx context.Context, buildID string) bool {
+func (p *JUnitProber) isBuildFinished(ctx context.Context, buildID string) (bool, error) {
 	_, err := p.fetchText(ctx, p.prowLogObjectURL(buildID, prowObjectFinished))
-	return err == nil
+	if err == nil {
+		return true, nil
+	}
+	var httpErr *httpStatusError
+	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, err
 }
 
 func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
@@ -179,7 +196,12 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 	// If the latest build hasn't finished yet, fall back to the previous
 	// completed build so we don't error on missing artifacts.
 	unfinishedBuild := ""
-	if !p.isBuildFinished(ctx, latest) {
+	finished, finErr := p.isBuildFinished(ctx, latest)
+	if finErr != nil {
+		results <- p.formatErrorResult(fmt.Errorf("checking finished.json for build %s: %w", latest, finErr))
+		return
+	}
+	if !finished {
 		unfinishedBuild = latest
 		prevID, findErr := p.findPreviousBuildID(ctx, latest)
 		if findErr != nil {
@@ -572,7 +594,7 @@ func (p *JUnitProber) fetchText(ctx context.Context, url string) (string, error)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, resp.Body)
-		return "", fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+		return "", &httpStatusError{StatusCode: resp.StatusCode, URL: url}
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTextBodyBytes))
 	if err != nil {
