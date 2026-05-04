@@ -483,7 +483,12 @@ func TestJUnitProber_Probe_fallback(t *testing.T) {
 				&mockHTTPDoer{responses: tt.responses})
 			results := make(chan ProbeResult, 1)
 			p.Probe(context.Background(), results)
-			res := <-results
+			var res ProbeResult
+			select {
+			case res = <-results:
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("timeout waiting for result")
+			}
 			if tt.expectedError {
 				if res.Error == nil {
 					t.Fatal("expected error, got nil")
@@ -605,7 +610,12 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 			)
 			results := make(chan ProbeResult, 1)
 			p.Probe(context.Background(), results)
-			res := <-results
+			var res ProbeResult
+			select {
+			case res = <-results:
+			case <-time.After(500 * time.Millisecond):
+				t.Fatal("timeout waiting for result")
+			}
 			if tt.expectedError {
 				if res.Error == nil {
 					t.Fatal("expected error, got nil")
