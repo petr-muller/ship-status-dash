@@ -15,9 +15,17 @@ type Prober interface {
 	Probe(ctx context.Context, results chan<- ProbeResult)
 }
 
+const (
+	ProbeTypeHTTP       = "http"
+	ProbeTypeJUnit      = "junit"
+	ProbeTypePrometheus = "prometheus"
+	ProbeTypeSystemd    = "systemd"
+)
+
 type ProbeResult struct {
 	types.ComponentMonitorReportComponentStatus
-	Error error
+	ProbeType string
+	Error     error
 }
 
 // ProbeOrchestrator manages the execution of component probes.
@@ -96,6 +104,7 @@ func (o *ProbeOrchestrator) collectProbeResults(ctx context.Context) []ProbeResu
 				"component":     probeResult.ComponentSlug,
 				"sub_component": probeResult.SubComponentSlug,
 				"status":        probeResult.Status,
+				"probe_type":    probeResult.ProbeType,
 			})
 			if probeResult.Error != nil {
 				resultLog.Errorf("Error: %v", probeResult.Error)

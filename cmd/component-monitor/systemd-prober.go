@@ -108,6 +108,7 @@ func (p *SystemdProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 				Results: fmt.Sprintf("ActiveState: %s", activeState),
 			}},
 		},
+		ProbeType: ProbeTypeSystemd,
 	})
 }
 
@@ -117,6 +118,7 @@ func (p *SystemdProber) formatErrorResult(err error) ProbeResult {
 			ComponentSlug:    p.componentSlug,
 			SubComponentSlug: p.subComponentSlug,
 		},
-		Error: fmt.Errorf("error running systemd probe, for component: %s sub-component %s. unit: %s. error: %w", p.componentSlug, p.subComponentSlug, p.unit, err),
+		ProbeType: ProbeTypeSystemd,
+		Error:     fmt.Errorf("error running systemd probe, for component: %s sub-component %s. unit: %s. error: %w", p.componentSlug, p.subComponentSlug, p.unit, err),
 	}
 }

@@ -517,6 +517,7 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 	latestURL := gcsProwObjectURL(bucket, job, prowObjectLatestBuild)
 	startedURL := gcsProwObjectURL(bucket, job, latest, prowObjectStarted)
 	finishedURL := gcsProwObjectURL(bucket, job, latest, prowObjectFinished)
+	finished199 := gcsProwObjectURL(bucket, job, "199", prowObjectFinished)
 	startedPrev := gcsProwObjectURL(bucket, job, "199", prowObjectStarted)
 	listURL := gcsListObjectURLTest(bucket, job)
 	xml200 := gcsProwObjectURL(bucket, job, "200", "artifacts", "junit_canary.xml")
@@ -545,6 +546,7 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 				latestURL:   {body: latest},
 				startedURL:  {body: recentStarted()},
 				finishedURL: {body: finishedBody},
+				finished199: {body: finishedBody},
 				listURL:     {body: listBody},
 				xml200:      {body: failing},
 				xml199:      {body: failing},
@@ -557,6 +559,7 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 				latestURL:   {body: latest},
 				startedURL:  {body: recentStarted()},
 				finishedURL: {body: finishedBody},
+				finished199: {body: finishedBody},
 				listURL:     {body: listBody},
 				xml200:      {body: ok},
 				xml199:      {body: failing},
@@ -569,6 +572,7 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 				latestURL:   {body: latest},
 				startedURL:  {body: recentStarted()},
 				finishedURL: {body: finishedBody},
+				finished199: {body: finishedBody},
 				listURL:     {body: listBody},
 				xml200:      {body: onlyA},
 				xml199:      {body: onlyB},
@@ -576,11 +580,12 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 			expectedStatus: types.StatusHealthy,
 		},
 		{
-			name: "excludes unfinished latest from evaluation",
+			name: "excludes newest unfinished build from history evaluation",
 			responses: map[string]mockHTTPResponse{
 				latestURL:   {body: latest},
 				startedURL:  {body: recentStarted()},
 				finishedURL: {statusCode: 404, body: "not found"},
+				finished199: {body: finishedBody},
 				listURL:     {body: listBody},
 				startedPrev: {body: recentStarted()},
 				xml199:      {body: ok},
@@ -588,14 +593,25 @@ func TestJUnitProber_Probe_history(t *testing.T) {
 			expectedStatus: types.StatusHealthy,
 		},
 		{
-			name: "errors on non-latest build 404",
+			name: "errors when older build is unfinished",
 			responses: map[string]mockHTTPResponse{
 				latestURL:   {body: latest},
 				startedURL:  {body: recentStarted()},
 				finishedURL: {body: finishedBody},
+				finished199: {statusCode: 404, body: "not found"},
 				listURL:     {body: listBody},
-				xml200:      {body: ok},
-				xml199:      {statusCode: 404, body: "not found"},
+			},
+			expectedError: true,
+		},
+		{
+			name: "errors when no finished builds exist",
+			responses: map[string]mockHTTPResponse{
+				latestURL:   {body: latest},
+				startedURL:  {body: recentStarted()},
+				finishedURL: {statusCode: 404, body: "not found"},
+				finished199: {statusCode: 404, body: "not found"},
+				listURL:     {body: listBody},
+				startedPrev: {body: recentStarted()},
 			},
 			expectedError: true,
 		},

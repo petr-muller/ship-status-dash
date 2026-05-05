@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"ship-status-dash/pkg/types"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -39,6 +41,11 @@ type httpStatusError struct {
 
 func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("HTTP %d from %s", e.StatusCode, e.URL)
+}
+
+func isHTTP404(err error) bool {
+	var httpErr *httpStatusError
+	return errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound
 }
 
 // junitHTTPClient is the HTTP client used to GET Prow and GCS resources. *http.Client implements it.
@@ -122,7 +129,8 @@ func (p *JUnitProber) formatErrorResult(err error) ProbeResult {
 			ComponentSlug:    p.componentSlug,
 			SubComponentSlug: p.subComponentSlug,
 		},
-		Error: fmt.Errorf("error running JUnit probe, for component: %s sub-component %s. job: %s. error: %w", p.componentSlug, p.subComponentSlug, p.jobName, err),
+		ProbeType: ProbeTypeJUnit,
+		Error:     fmt.Errorf("error running JUnit probe, for component: %s sub-component %s. job: %s. error: %w", p.componentSlug, p.subComponentSlug, p.jobName, err),
 	}
 }
 
@@ -154,6 +162,7 @@ func (p *JUnitProber) checkBuildStaleness(ctx context.Context, buildID string) (
 					Results: fmt.Sprintf("latest build %s started %s ago (max age %s)", buildID, age.Round(time.Minute), p.maxAge),
 				}},
 			},
+			ProbeType: ProbeTypeJUnit,
 		}, nil
 	}
 	return nil, nil
@@ -164,8 +173,7 @@ func (p *JUnitProber) isBuildFinished(ctx context.Context, buildID string) (bool
 	if err == nil {
 		return true, nil
 	}
-	var httpErr *httpStatusError
-	if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+	if isHTTP404(err) {
 		return false, nil
 	}
 	return false, err
@@ -202,6 +210,12 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		return
 	}
 	if !finished {
+		logrus.WithFields(logrus.Fields{
+			"component":     p.componentSlug,
+			"sub_component": p.subComponentSlug,
+			"job":           p.jobName,
+			"build":         latest,
+		}).Info("Latest build not finished, falling back to previous build")
 		unfinishedBuild = latest
 		prevID, findErr := p.findPreviousBuildID(ctx, latest)
 		if findErr != nil {
@@ -277,14 +291,13 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 		}
 	}
 	if highestCount < threshold {
-		// Healthy: omit Reasons — mergeStatuses strips them for Healthy in the report anyway.
 		results <- ProbeResult{
 			ComponentMonitorReportComponentStatus: types.ComponentMonitorReportComponentStatus{
 				ComponentSlug:    p.componentSlug,
 				SubComponentSlug: p.subComponentSlug,
 				Status:           types.StatusHealthy,
-				Reasons:          nil,
 			},
+			ProbeType: ProbeTypeJUnit,
 		}
 		return
 	}
@@ -299,6 +312,7 @@ func (p *JUnitProber) Probe(ctx context.Context, results chan<- ProbeResult) {
 			Status:           p.severity.ToStatus(),
 			Reasons:          []types.Reason{{Type: types.CheckTypeJUnit, Check: p.jobName, Results: reason}},
 		},
+		ProbeType: ProbeTypeJUnit,
 	}
 }
 
@@ -320,11 +334,40 @@ func (p *JUnitProber) resolveBuildIDsToEvaluate(ctx context.Context, latestFromF
 		all = append(all, id)
 	}
 	sortBuildIDsDesc(all)
-	n := p.settings.HistoryRuns
-	if len(all) < n {
-		return all, nil
+
+	// The newest build (all[0]) may legitimately be unfinished — its GCS
+	// prefix can appear before artifacts are uploaded. Any older build
+	// without finished.json is an error.
+	var finished []string
+	for i, id := range all {
+		done, fErr := p.isBuildFinished(ctx, id)
+		if fErr != nil {
+			return nil, fmt.Errorf("checking finished.json for build %s: %w", id, fErr)
+		}
+		if done {
+			finished = append(finished, id)
+			continue
+		}
+		if i == 0 {
+			logrus.WithFields(logrus.Fields{
+				"component":     p.componentSlug,
+				"sub_component": p.subComponentSlug,
+				"job":           p.jobName,
+				"build":         id,
+			}).Info("Excluding unfinished latest build from history evaluation")
+			continue
+		}
+		return nil, fmt.Errorf("build %s is not the latest but has no finished.json", id)
 	}
-	return all[:n], nil
+	if len(finished) == 0 {
+		return nil, fmt.Errorf("no finished builds found among %d candidates", len(all))
+	}
+
+	n := p.settings.HistoryRuns
+	if len(finished) < n {
+		return finished, nil
+	}
+	return finished[:n], nil
 }
 
 func (p *JUnitProber) findPreviousBuildID(ctx context.Context, currentBuildID string) (string, error) {
@@ -579,6 +622,7 @@ func (p *JUnitProber) makeStatusFromAggregates(buildID string, total int, failed
 			Status:           status,
 			Reasons:          reasons,
 		},
+		ProbeType: ProbeTypeJUnit,
 	}
 }
 
