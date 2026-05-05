@@ -117,7 +117,8 @@ func (p *PrometheusProber) createErrorResult(query string, err error) ProbeResul
 			ComponentSlug:    p.componentSlug,
 			SubComponentSlug: p.subComponentSlug,
 		},
-		Error: fmt.Errorf("error running Prometheus query, for component: %s sub-component %s. query: %s. error: %w", p.componentSlug, p.subComponentSlug, query, err),
+		ProbeType: ProbeTypePrometheus,
+		Error:     fmt.Errorf("error running Prometheus query, for component: %s sub-component %s. query: %s. error: %w", p.componentSlug, p.subComponentSlug, query, err),
 	}
 }
 
@@ -166,7 +167,7 @@ func (p *PrometheusProber) createStatusFromQueryResults(ctx context.Context, suc
 		status.Reasons = reasons
 	}
 
-	return ProbeResult{ComponentMonitorReportComponentStatus: status}
+	return ProbeResult{ComponentMonitorReportComponentStatus: status, ProbeType: ProbeTypePrometheus}
 }
 
 func extractValue(result model.Value) string {

@@ -38,7 +38,8 @@ func (p *HTTPProber) formatErrorResult(err error) ProbeResult {
 			ComponentSlug:    p.componentSlug,
 			SubComponentSlug: p.subComponentSlug,
 		},
-		Error: fmt.Errorf("error running HTTP probe, for component: %s sub-component %s. url: %s. error: %w", p.componentSlug, p.subComponentSlug, p.url, err),
+		ProbeType: ProbeTypeHTTP,
+		Error:     fmt.Errorf("error running HTTP probe, for component: %s sub-component %s. url: %s. error: %w", p.componentSlug, p.subComponentSlug, p.url, err),
 	}
 }
 
@@ -61,6 +62,7 @@ func (p *HTTPProber) makeStatus(statusCode int) ProbeResult {
 				Results: fmt.Sprintf("Status code %d (expected %d)", statusCode, p.expectedStatusCode),
 			}},
 		},
+		ProbeType: ProbeTypeHTTP,
 	}
 }
 
