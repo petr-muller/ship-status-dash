@@ -65,6 +65,7 @@ fi
 
 if [ "$BACKGROUND" = false ]; then
   cleanup() {
+    local exit_status=$?
     set +e
     echo ""
     echo "Cleaning up..."
@@ -84,7 +85,7 @@ if [ "$BACKGROUND" = false ]; then
     fi
 
     echo "Cleanup complete"
-    exit 0
+    exit "$exit_status"
   }
 
   trap cleanup EXIT

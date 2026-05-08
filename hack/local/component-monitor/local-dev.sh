@@ -165,6 +165,29 @@ echo "Component-monitor logs: $COMPONENT_MONITOR_LOG"
 go run ./cmd/component-monitor --config-path hack/local/component-monitor/config.yaml --dashboard-url "$DASHBOARD_URL" --name local-component-monitor --report-auth-token-file "$COMPONENT_MONITOR_TOKEN" > "$COMPONENT_MONITOR_LOG" 2>&1 &
 COMPONENT_MONITOR_PID=$!
 
+echo "Waiting for component-monitor to be ready..."
+READY=false
+for i in {1..30}; do
+  if ! kill -0 "$COMPONENT_MONITOR_PID" 2>/dev/null; then
+    echo "Component-monitor process exited before becoming ready"
+    cat "$COMPONENT_MONITOR_LOG" 2>/dev/null || true
+    exit 1
+  fi
+  if grep -qE 'Probing [0-9]+ components' "$COMPONENT_MONITOR_LOG" 2>/dev/null; then
+    READY=true
+    break
+  fi
+  if [ "$i" -eq 30 ]; then
+    break
+  fi
+  sleep 1
+done
+if [ "$READY" != true ]; then
+  echo "Component-monitor failed to become ready within 30 seconds"
+  cat "$COMPONENT_MONITOR_LOG" 2>/dev/null || true
+  exit 1
+fi
+
 echo ""
 echo "Component-monitor stack is running!"
 echo "  Mock component: http://localhost:8081 (pid $MOCK_COMPONENT_PID)"

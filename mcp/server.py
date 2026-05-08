@@ -6,6 +6,7 @@ import time
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
+from typing import NamedTuple
 
 from fastmcp import FastMCP
 
@@ -293,7 +294,7 @@ def _run_script_background(
 
     if ready_url:
         ready = False
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + ready_timeout
         while time.monotonic() < deadline:
             try:
                 urllib.request.urlopen(ready_url, timeout=2)
@@ -308,13 +309,19 @@ def _run_script_background(
     return f"{label} started. log: {log_path}\n{output}"
 
 
+class ForegroundRunResult(NamedTuple):
+    success: bool
+    timed_out: bool
+    text: str
+
+
 def _run_foreground(
     label: str,
     args: list[str],
     log_filename: str,
     timeout_seconds: int,
     env_extra: dict[str, str] | None = None,
-) -> str:
+) -> ForegroundRunResult:
     _ensure_dev_log_dir()
     log_path = DEV_LOG_DIR / log_filename
     run_env = os.environ.copy()
@@ -347,18 +354,26 @@ def _run_foreground(
                     pass
                 proc.wait()
             tail = _tail_file(log_path, 80)
-            return (
+            return ForegroundRunResult(
+                False,
+                True,
                 f"{label} timed out after {timeout_seconds}s. log: {log_path}\n"
-                f"--- tail ---\n{tail}"
+                f"--- tail ---\n{tail}",
             )
     if returncode != 0:
         tail = _tail_file(log_path, 80)
-        return (
+        return ForegroundRunResult(
+            False,
+            False,
             f"{label} failed (exit {returncode}). log: {log_path}\n"
-            f"--- tail ---\n{tail}"
+            f"--- tail ---\n{tail}",
         )
     tail = _tail_file(log_path, 40)
-    return f"{label} succeeded (exit 0). log: {log_path}\n--- last lines ---\n{tail}"
+    return ForegroundRunResult(
+        True,
+        False,
+        f"{label} succeeded (exit 0). log: {log_path}\n--- last lines ---\n{tail}",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -523,7 +538,7 @@ def run_migrate(
         ["go", "run", "./cmd/migrate", "--dsn", dsn],
         "run_migrate.log",
         timeout_seconds,
-    )
+    ).text
 
 
 @mcp.tool()
@@ -580,8 +595,8 @@ def run_tests(
         "run_lint.log",
         timeout_seconds,
     )
-    if "failed" in lint_result or "timed out" in lint_result:
-        return f"Lint failed, skipping tests.\n{lint_result}"
+    if not lint_result.success:
+        return f"Lint failed, skipping tests.\n{lint_result.text}"
 
     test_result = _run_foreground(
         "test",
@@ -590,7 +605,7 @@ def run_tests(
         timeout_seconds,
     )
 
-    return f"=== Lint ===\n{lint_result}\n\n=== Tests ===\n{test_result}"
+    return f"=== Lint ===\n{lint_result.text}\n\n=== Tests ===\n{test_result.text}"
 
 
 if __name__ == "__main__":
