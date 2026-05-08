@@ -45,6 +45,20 @@ kill_processes_on_port() {
   fi
 }
 
+DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"
+PROXY_PORT="${PROXY_PORT:-8443}"
+
+echo "Checking if ports are available..."
+if lsof -i :$DASHBOARD_PORT > /dev/null 2>&1; then
+  echo "Error: Port $DASHBOARD_PORT is already in use"
+  exit 1
+fi
+
+if lsof -i :$PROXY_PORT > /dev/null 2>&1; then
+  echo "Error: Port $PROXY_PORT is already in use"
+  exit 1
+fi
+
 if [ "$BACKGROUND" = false ]; then
   cleanup() {
     set +e
@@ -70,20 +84,6 @@ if [ "$BACKGROUND" = false ]; then
   }
 
   trap cleanup EXIT
-fi
-
-DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"
-PROXY_PORT="${PROXY_PORT:-8443}"
-
-echo "Checking if ports are available..."
-if lsof -i :$DASHBOARD_PORT > /dev/null 2>&1; then
-  echo "Error: Port $DASHBOARD_PORT is already in use"
-  exit 1
-fi
-
-if lsof -i :$PROXY_PORT > /dev/null 2>&1; then
-  echo "Error: Port $PROXY_PORT is already in use"
-  exit 1
 fi
 
 echo "Running database migrations..."

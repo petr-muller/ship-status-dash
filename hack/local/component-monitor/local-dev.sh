@@ -21,13 +21,10 @@ PROMETHEUS_CONTAINER_NAME="prometheus-local-dev"
 DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:8443}"
 PROMETHEUS_DATA_DIR="${PROMETHEUS_DATA_DIR:-/tmp/prometheus-local-dev}"
 
-EXIT_CODE=0
 cleanup() {
-  EXIT_CODE="${EXIT_CODE:-$?}"
+  local ec
+  ec="${EXIT_CODE:-$?}"
   set +e
-  if [ "$BACKGROUND" = true ]; then
-    exit "$EXIT_CODE"
-  fi
   echo ""
   echo "Cleaning up..."
   if [ ! -z "$MOCK_COMPONENT_PID" ]; then
@@ -55,7 +52,7 @@ cleanup() {
     rm -f "$COMPONENT_MONITOR_TOKEN"
   fi
   echo "Cleanup complete"
-  exit "$EXIT_CODE"
+  exit "$ec"
 }
 
 trap cleanup EXIT

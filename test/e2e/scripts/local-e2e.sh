@@ -7,9 +7,12 @@ PROMETHEUS_CONTAINER_NAME="prometheus-e2e"
 DB_USER="postgres"
 DB_PASSWORD="testpass"
 DB_NAME="ship_status_e2e_$$"
+# Devcontainer Postgres on ship-status-net (fixed host/port; see .devcontainer/init-services.sh).
+E2E_PG_HOST=ship-status-postgres
+E2E_PG_PORT=5432
 
 # Detect whether to run services natively or in containers.
-# PostgreSQL: reuse an existing server if psql can connect, otherwise container.
+# PostgreSQL: that devcontainer service if reachable, otherwise a throwaway podman DB.
 # Prometheus: use native binary if available, otherwise container.
 USE_EXISTING_POSTGRES=false
 USE_NATIVE_PROMETHEUS=false
@@ -19,26 +22,9 @@ if command -v prometheus > /dev/null 2>&1; then
   USE_NATIVE_PROMETHEUS=true
 fi
 
-# Check for an existing PostgreSQL server we can reuse.
-# Try SHIP_STATUS_DSN first (set by devcontainer), then probe localhost ports.
-EXISTING_PG_DSN=""
 if command -v psql > /dev/null 2>&1; then
-  if [ -n "$SHIP_STATUS_DSN" ]; then
-    # Extract host:port from the DSN to build a test connection URL
-    PG_HOSTPORT=$(echo "$SHIP_STATUS_DSN" | sed -n 's|.*@\([^/]*\)/.*|\1|p')
-    if psql "postgres://$DB_USER:password@$PG_HOSTPORT/postgres?sslmode=disable" -c "SELECT 1" > /dev/null 2>&1; then
-      USE_EXISTING_POSTGRES=true
-      EXISTING_PG_DSN="postgres://$DB_USER:password@$PG_HOSTPORT"
-    fi
-  fi
-  if [ "$USE_EXISTING_POSTGRES" = false ]; then
-    for try_port in 5432 5433; do
-      if psql "postgres://$DB_USER:password@localhost:$try_port/postgres?sslmode=disable" -c "SELECT 1" > /dev/null 2>&1; then
-        USE_EXISTING_POSTGRES=true
-        EXISTING_PG_DSN="postgres://$DB_USER:password@localhost:$try_port"
-        break
-      fi
-    done
+  if psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "SELECT 1" > /dev/null 2>&1; then
+    USE_EXISTING_POSTGRES=true
   fi
 fi
 
@@ -46,7 +32,7 @@ DOCKER=${DOCKER:-podman}
 if [ "$USE_EXISTING_POSTGRES" = false ] || [ "$USE_NATIVE_PROMETHEUS" = false ]; then
   if ! command -v "$DOCKER" > /dev/null 2>&1; then
     echo "Missing native binaries and $DOCKER not available."
-    [ "$USE_EXISTING_POSTGRES" = false ] && echo "  PostgreSQL: no reachable server found and no $DOCKER"
+    [ "$USE_EXISTING_POSTGRES" = false ] && echo "  PostgreSQL: unreachable at ${E2E_PG_HOST}:${E2E_PG_PORT} (devcontainer) and no $DOCKER for a throwaway DB"
     [ "$USE_NATIVE_PROMETHEUS" = false ] && echo "  Prometheus: need prometheus binary OR $DOCKER"
     exit 1
   fi
@@ -120,7 +106,7 @@ cleanup() {
 
   echo "Cleaning up postgres..."
   if [ "$USE_EXISTING_POSTGRES" = true ]; then
-    psql "$EXISTING_PG_DSN/postgres?sslmode=disable" -c "DROP DATABASE IF EXISTS $DB_NAME;" > /dev/null 2>&1 || true
+    psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "DROP DATABASE IF EXISTS $DB_NAME;" > /dev/null 2>&1 || true
   elif [ "$STARTED_POSTGRES_CONTAINER" = true ]; then
     $DOCKER rm -f $POSTGRES_CONTAINER_NAME > /dev/null 2>&1 || true
   fi
@@ -144,10 +130,10 @@ trap cleanup EXIT
 
 # --- PostgreSQL ---
 if [ "$USE_EXISTING_POSTGRES" = true ]; then
-  echo "Using existing PostgreSQL at ${EXISTING_PG_DSN##*@}..."
+  echo "Using PostgreSQL at ${E2E_PG_HOST}:${E2E_PG_PORT} (ephemeral database $DB_NAME)..."
   echo "Creating test database $DB_NAME..."
-  psql "$EXISTING_PG_DSN/postgres?sslmode=disable" -c "DROP DATABASE IF EXISTS $DB_NAME;" > /dev/null 2>&1 || true
-  psql "$EXISTING_PG_DSN/postgres?sslmode=disable" -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1
+  psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "DROP DATABASE IF EXISTS $DB_NAME;" > /dev/null 2>&1 || true
+  psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1
 else
   echo "Starting PostgreSQL container on port $DB_PORT..."
   if $DOCKER ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${POSTGRES_CONTAINER_NAME}$" 2>/dev/null; then
@@ -184,7 +170,7 @@ else
 fi
 
 if [ "$USE_EXISTING_POSTGRES" = true ]; then
-  DSN="$EXISTING_PG_DSN/$DB_NAME?sslmode=disable&client_encoding=UTF8"
+  DSN="postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/$DB_NAME?sslmode=disable&client_encoding=UTF8"
 else
   DSN="postgres://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?sslmode=disable&client_encoding=UTF8"
 fi

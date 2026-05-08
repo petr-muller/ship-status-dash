@@ -396,15 +396,29 @@ def frontend_start(
         return f"frontend_start exited immediately (exit {code}). log: {log_path}\n--- tail ---\n{tail}"
 
     deadline = time.monotonic() + 120
+    ready = False
     while time.monotonic() < deadline:
         try:
             urllib.request.urlopen("http://localhost:3000", timeout=2)
+            ready = True
             break
         except Exception:
             if proc.poll() is not None:
                 tail = _tail_file(log_path, 40)
-                return f"frontend_start exited (exit {proc.poll()}). log: {log_path}\n--- tail ---\n{tail}"
+                code = proc.poll()
+                return f"frontend_start exited (exit {code}). log: {log_path}\n--- tail ---\n{tail}"
             time.sleep(1)
+
+    code = proc.poll()
+    if code is not None:
+        tail = _tail_file(log_path, 40)
+        return f"frontend_start exited (exit {code}). log: {log_path}\n--- tail ---\n{tail}"
+    if not ready:
+        tail = _tail_file(log_path, 40)
+        return (
+            f"frontend_start readiness timed out. pid {proc.pid}. log: {log_path}\n"
+            f"--- tail ---\n{tail}"
+        )
 
     return (
         f"frontend_start started (pid {proc.pid}). URL: http://localhost:3000 "
