@@ -54,6 +54,7 @@ type Options struct {
 	Port           string
 	Upstream       string
 	HMACSecretFile string
+	FrontendDevURL string
 }
 
 func NewOptions() *Options {
@@ -62,6 +63,12 @@ func NewOptions() *Options {
 	flag.StringVar(&opts.Port, "port", "8443", "Port to listen on")
 	flag.StringVar(&opts.Upstream, "upstream", "", "Upstream server URL")
 	flag.StringVar(&opts.HMACSecretFile, "hmac-secret-file", "", "File containing HMAC secret")
+	flag.StringVar(
+		&opts.FrontendDevURL,
+		"frontend-dev-url",
+		"http://localhost:3030",
+		"OAuth callback redirect and default CORS origin for local Vite (include scheme, no trailing slash)",
+	)
 	flag.Parse()
 	return opts
 }
@@ -148,14 +155,21 @@ func oauthStartHandler(config *Config, logger *logrus.Logger) http.Handler {
 	})
 }
 
-func oauthCallbackHandler() http.Handler {
+func oauthCallbackHandler(frontendDevURL string) http.Handler {
+	redirect := strings.TrimSuffix(frontendDevURL, "/") + "/"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// In local development, redirect to React dev server on port 3000
-		http.Redirect(w, r, "http://localhost:3000/", http.StatusFound)
+		http.Redirect(w, r, redirect, http.StatusFound)
 	})
 }
 
-func basicAuthHandler(config *Config, upstreamURL *url.URL, hmacAuth hmacauth.HmacAuth, logger *logrus.Logger) http.Handler {
+func basicAuthHandler(
+	config *Config,
+	upstreamURL *url.URL,
+	hmacAuth hmacauth.HmacAuth,
+	logger *logrus.Logger,
+	frontendDevURL string,
+) http.Handler {
+	defaultOrigin := strings.TrimSuffix(frontendDevURL, "/")
 	proxy := httputil.NewSingleHostReverseProxy(upstreamURL)
 
 	originalDirector := proxy.Director
@@ -186,7 +200,7 @@ func basicAuthHandler(config *Config, upstreamURL *url.URL, hmacAuth hmacauth.Hm
 		if r.Method == http.MethodOptions {
 			origin := r.Header.Get("Origin")
 			if origin == "" {
-				origin = "http://localhost:3000"
+				origin = defaultOrigin
 			}
 			requestLogger.WithField("origin", origin).Info("Handling OPTIONS preflight request")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -324,8 +338,8 @@ func main() {
 	router := mux.NewRouter()
 	router.Handle("/health", unauthProxy)
 	router.Handle("/oauth/start", oauthStartHandler(config, logger))
-	router.Handle("/oauth/callback", oauthCallbackHandler())
-	router.PathPrefix("/").Handler(basicAuthHandler(config, upstreamURL, hmacAuth, logger))
+	router.Handle("/oauth/callback", oauthCallbackHandler(opts.FrontendDevURL))
+	router.PathPrefix("/").Handler(basicAuthHandler(config, upstreamURL, hmacAuth, logger, opts.FrontendDevURL))
 
 	server := &http.Server{
 		Addr:              ":" + opts.Port,

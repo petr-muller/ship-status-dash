@@ -29,6 +29,73 @@ def _tail_file(path: Path, max_lines: int) -> str:
     return "\n".join(lines[-max_lines:])
 
 
+def _free_tcp_port(port: int) -> None:
+    """SIGTERM then SIGKILL listeners on ``port`` (matches hack/local dashboard port cleanup)."""
+    script = (
+        f"pids=$(lsof -ti :{port} 2>/dev/null); "
+        f'[ -n "$pids" ] && for pid in $pids; do kill -TERM "$pid" 2>/dev/null; done; '
+        f"sleep 1; "
+        f"pids=$(lsof -ti :{port} 2>/dev/null); "
+        f'[ -n "$pids" ] && for pid in $pids; do kill -KILL "$pid" 2>/dev/null; done; '
+        f"true"
+    )
+    try:
+        subprocess.run(
+            ["bash", "-c", script],
+            timeout=15,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+
+def _terminate_process_group(proc: subprocess.Popen) -> None:
+    """Best-effort teardown for Popen with start_new_session=True (session leader = process group)."""
+    if proc.poll() is not None:
+        return
+    pid = proc.pid
+    if pid is None:
+        return
+    killpg = getattr(os, "killpg", None)
+    if killpg is not None:
+        try:
+            killpg(pid, signal.SIGTERM)
+        except (ProcessLookupError, ChildProcessError, OSError):
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                return
+    else:
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            return
+    for _ in range(20):
+        if proc.poll() is not None:
+            return
+        time.sleep(0.1)
+    if proc.poll() is not None:
+        return
+    if killpg is not None:
+        try:
+            killpg(pid, signal.SIGKILL)
+        except (ProcessLookupError, ChildProcessError, OSError):
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                return
+    else:
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            return
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
+
+
 def _default_dsn() -> str:
     return os.environ.get(
         "SHIP_STATUS_DSN",
@@ -164,9 +231,15 @@ def _pids_prometheus() -> list[int]:
 
 
 def _pids_component_monitor() -> list[int]:
+    # go run leaves a compiled child whose argv is .../component-monitor, not cmd/component-monitor.
     def _match(cmd: str) -> bool:
-        return "cmd/component-monitor" in cmd
-    return _find_pids(REPO_ROOT.resolve(), _match, ["cmd/component-monitor"])
+        return "cmd/component-monitor" in cmd or "--name local-component-monitor" in cmd
+
+    return _find_pids(
+        REPO_ROOT.resolve(),
+        _match,
+        ["cmd/component-monitor", "local-component-monitor"],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -321,6 +394,8 @@ def dashboard_serve(
             _stop_pids(existing_dash)
         if existing_proxy:
             _stop_pids(existing_proxy)
+        _free_tcp_port(dashboard_port)
+        _free_tcp_port(proxy_port)
 
     dsn = database_dsn or _default_dsn()
     log_path = DEV_LOG_DIR / "dashboard_serve.log"
@@ -338,15 +413,19 @@ def dashboard_serve(
     )
 
 
+FRONTEND_DEV_PORT = 3030
+
+
 @mcp.tool()
 def frontend_start(
     dashboard_port: int = 8080,
     proxy_port: int = 8443,
+    frontend_port: int = FRONTEND_DEV_PORT,
     restart: bool = False,
 ) -> str:
     """Start the Vite dev server (``npm run start`` in ``frontend``) in the background.
 
-    Defaults to port 3000. Sets ``VITE_PUBLIC_DOMAIN`` and ``VITE_PROTECTED_DOMAIN``
+    Defaults to port 3030. Sets ``VITE_PUBLIC_DOMAIN`` and ``VITE_PROTECTED_DOMAIN``
     based on the dashboard and proxy ports. Skips starting if already running unless
     ``restart`` is True.
     """
@@ -360,10 +439,12 @@ def frontend_start(
             pids = ", ".join(str(p) for p in existing)
             return (
                 f"frontend_start already running (pid(s) {pids}). "
-                f"URL: http://localhost:3000. "
+                f"URL: http://localhost:{frontend_port}. "
                 f"Call with restart=True to restart."
             )
         _stop_pids(existing)
+    if restart:
+        _free_tcp_port(frontend_port)
 
     _ensure_dev_log_dir()
     log_path = DEV_LOG_DIR / "frontend_start.log"
@@ -376,7 +457,7 @@ def frontend_start(
     logf = open(log_path, "a", encoding="utf-8")
     try:
         proc = subprocess.Popen(
-            ["npm", "run", "start"],
+            ["npm", "run", "start", "--", "--port", str(frontend_port)],
             cwd=frontend_dir,
             env=env,
             stdout=logf,
@@ -399,7 +480,7 @@ def frontend_start(
     ready = False
     while time.monotonic() < deadline:
         try:
-            urllib.request.urlopen("http://localhost:3000", timeout=2)
+            urllib.request.urlopen(f"http://localhost:{frontend_port}", timeout=2)
             ready = True
             break
         except Exception:
@@ -414,6 +495,7 @@ def frontend_start(
         tail = _tail_file(log_path, 40)
         return f"frontend_start exited (exit {code}). log: {log_path}\n--- tail ---\n{tail}"
     if not ready:
+        _terminate_process_group(proc)
         tail = _tail_file(log_path, 40)
         return (
             f"frontend_start readiness timed out. pid {proc.pid}. log: {log_path}\n"
@@ -421,7 +503,7 @@ def frontend_start(
         )
 
     return (
-        f"frontend_start started (pid {proc.pid}). URL: http://localhost:3000 "
+        f"frontend_start started (pid {proc.pid}). URL: http://localhost:{frontend_port} "
         f"log: {log_path}"
     )
 
@@ -470,6 +552,8 @@ def component_monitor_start(
             _stop_pids(existing_mock)
         if existing_prom:
             _stop_pids(existing_prom)
+        for port in (8081, 9090):
+            _free_tcp_port(port)
 
     log_path = DEV_LOG_DIR / "component_monitor.log"
 

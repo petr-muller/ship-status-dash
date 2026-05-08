@@ -14,11 +14,11 @@
   "workspaceFolder": "/workspace",
   "remoteUser": "vscode",
   "initializeCommand": ".devcontainer/init-services.sh",
-  "forwardPorts": [8080, 8443, 3000, 5433, 9090],
+  "forwardPorts": [8080, 8443, 3030, 5433, 9090],
   "portsAttributes": {
     "8080": { "label": "Dashboard API" },
     "8443": { "label": "Mock OAuth Proxy" },
-    "3000": { "label": "Vite Dev Server" },
+    "3030": { "label": "Vite Dev Server" },
     "5433": { "label": "PostgreSQL" },
     "9090": { "label": "Prometheus" }
   },

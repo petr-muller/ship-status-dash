@@ -21,6 +21,29 @@ PROMETHEUS_CONTAINER_NAME="prometheus-local-dev"
 DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:8443}"
 PROMETHEUS_DATA_DIR="${PROMETHEUS_DATA_DIR:-/tmp/prometheus-local-dev}"
 
+kill_processes_on_port() {
+  local port=$1
+  local message=${2:-"Stopping processes on port $port..."}
+  PIDS=$(lsof -ti :$port 2>/dev/null) || true
+  if [ ! -z "$PIDS" ]; then
+    echo "$message"
+    for pid in $PIDS; do
+      kill -TERM "$pid" 2>/dev/null || true
+    done
+    sleep 1
+    PIDS=$(lsof -ti :$port 2>/dev/null) || true
+    if [ ! -z "$PIDS" ]; then
+      for pid in $PIDS; do
+        kill -KILL "$pid" 2>/dev/null || true
+      done
+    fi
+  fi
+}
+
+echo "Ensuring ports 8081 and 9090 are free..."
+kill_processes_on_port 8081 "Stopping processes on port 8081..."
+kill_processes_on_port 9090 "Stopping processes on port 9090..."
+
 cleanup() {
   local ec
   ec="${EXIT_CODE:-$?}"
@@ -165,6 +188,7 @@ if [ "$BACKGROUND" = true ]; then
   else
     echo "PIDs: mock_component=$MOCK_COMPONENT_PID component_monitor=$COMPONENT_MONITOR_PID"
   fi
+  trap - EXIT
   exit 0
 fi
 

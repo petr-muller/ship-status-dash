@@ -29,14 +29,14 @@ kill_processes_on_port() {
   local port=$1
   local message=${2:-"Stopping processes on port $port..."}
 
-  PIDS=$(lsof -ti :$port 2>/dev/null)
+  PIDS=$(lsof -ti :$port 2>/dev/null) || true
   if [ ! -z "$PIDS" ]; then
     echo "$message"
     for pid in $PIDS; do
       kill -TERM "$pid" 2>/dev/null || true
     done
     sleep 1
-    PIDS=$(lsof -ti :$port 2>/dev/null)
+    PIDS=$(lsof -ti :$port 2>/dev/null) || true
     if [ ! -z "$PIDS" ]; then
       for pid in $PIDS; do
         kill -KILL "$pid" 2>/dev/null || true
@@ -47,6 +47,10 @@ kill_processes_on_port() {
 
 DASHBOARD_PORT="${DASHBOARD_PORT:-8080}"
 PROXY_PORT="${PROXY_PORT:-8443}"
+
+echo "Ensuring ports $DASHBOARD_PORT and $PROXY_PORT are free..."
+kill_processes_on_port "$DASHBOARD_PORT" "Stopping processes on port $DASHBOARD_PORT..."
+kill_processes_on_port "$PROXY_PORT" "Stopping processes on port $PROXY_PORT..."
 
 echo "Checking if ports are available..."
 if lsof -i :$DASHBOARD_PORT > /dev/null 2>&1; then
@@ -102,7 +106,7 @@ echo "Starting dashboard server..."
 DASHBOARD_LOG="$LOG_DIR/dashboard-local-dev.log"
 echo "Dashboard server logs: $DASHBOARD_LOG"
 
-go run ./cmd/dashboard --config hack/local/dashboard/config.yaml --port $DASHBOARD_PORT --dsn "$DSN" --hmac-secret-file "$HMAC_SECRET_FILE" --cors-origin "http://localhost:3000" --absent-report-check-interval 15s --slack-base-url "http://localhost:3000" > "$DASHBOARD_LOG" 2>&1 &
+go run ./cmd/dashboard --config hack/local/dashboard/config.yaml --port $DASHBOARD_PORT --dsn "$DSN" --hmac-secret-file "$HMAC_SECRET_FILE" --cors-origin "http://localhost:3030" --absent-report-check-interval 15s --slack-base-url "http://localhost:3030" > "$DASHBOARD_LOG" 2>&1 &
 DASHBOARD_PID=$!
 
 echo "Waiting for dashboard server to be ready..."

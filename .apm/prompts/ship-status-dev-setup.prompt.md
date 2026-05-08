@@ -101,5 +101,5 @@ Print a summary of what was set up:
 - PostgreSQL: `localhost:5433` (host port) / `ship-status-postgres:5432` (inside devcontainer)
 - Dashboard API: `localhost:8080` (start with `/ship-status-dev-serve`)
 - Mock OAuth Proxy: `localhost:8443` (started alongside dashboard)
-- Vite dev server: `localhost:3000` (start with `/ship-status-dev-frontend`)
+- Vite dev server: `localhost:3030` (start with `/ship-status-dev-frontend`)
 - GCP auth status
