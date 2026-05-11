@@ -253,6 +253,26 @@ func TestManager_Watch(t *testing.T) {
 	}
 }
 
+func TestManager_ReloadCount(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := createTestConfigFile(t, tmpDir, "value: a")
+	manager := createTestManager(t, configPath)
+
+	require.Equal(t, uint64(0), manager.reloadCount.Load())
+
+	writeConfigFile(t, configPath, "value: b")
+	manager.reloadIfChanged()
+	require.Equal(t, uint64(1), manager.reloadCount.Load())
+
+	writeConfigFile(t, configPath, "value: c")
+	manager.reloadIfChanged()
+	require.Equal(t, uint64(2), manager.reloadCount.Load())
+
+	writeConfigFile(t, configPath, "value: c")
+	manager.reloadIfChanged()
+	require.Equal(t, uint64(2), manager.reloadCount.Load(), "unchanged content must not increment reload count")
+}
+
 func TestManager_HashValidation(t *testing.T) {
 	tests := []struct {
 		name           string

@@ -43,7 +43,7 @@ func NewDBOutageManager(
 	baseURL string,
 	slackWorkspaceURL string,
 	logger *logrus.Logger,
-) OutageManager {
+) *DBOutageManager {
 	slackThreadRepo := repositories.NewGORMSlackThreadRepository(db)
 	var slackReporter *SlackReporter
 	if slackClient != nil {

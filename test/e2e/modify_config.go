@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -15,6 +17,11 @@ import (
 	"gopkg.in/yaml.v3"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
+
+// logrus TextFormatter emits reload_count as reload_count=N on the same line as msg=...
+var configReloadReloadCountRe = regexp.MustCompile(`reload_count=(\d+)`)
+
+const configReloadLogTailLines = 2000
 
 // configMapToPodName maps ConfigMap names to their corresponding pod names
 var configMapToPodName = map[string]string{
@@ -61,9 +68,12 @@ func getConfigMapContents(t *testing.T, namespace, configMapName string) ([]byte
 // patchConfigMap patches a ConfigMap with the provided config data and waits for propagation
 func patchConfigMap(t *testing.T, namespace, configMapName string, configData []byte) {
 	kubectlCmd := getKubectlCmd(t)
+	podName := getPodNameForConfigMap(t, namespace, configMapName)
 
-	// Capture timestamp before patching to only check logs after this point
-	startTime := time.Now()
+	baselineReloadCount := 0
+	if tail, err := getPodLogsTail(kubectlCmd, namespace, podName, configReloadLogTailLines); err == nil {
+		baselineReloadCount = maxReloadCountOnConfigReloadLines(tail)
+	}
 
 	patchData := map[string]interface{}{
 		"data": map[string]string{
@@ -80,9 +90,7 @@ func patchConfigMap(t *testing.T, namespace, configMapName string, configData []
 		require.NoError(t, err, "Failed to patch ConfigMap %s/%s: %s", namespace, configMapName, string(output))
 	}
 
-	// Poll pod logs for "Config reloaded successfully" message to confirm the update
-	podName := getPodNameForConfigMap(t, namespace, configMapName)
-	waitForConfigReloadInPod(t, namespace, podName, configMapName, startTime)
+	waitForConfigReloadInPod(t, namespace, podName, baselineReloadCount)
 }
 
 // getPodNameForConfigMap returns the pod name for a given ConfigMap
@@ -94,20 +102,20 @@ func getPodNameForConfigMap(t *testing.T, namespace, configMapName string) strin
 	return podName
 }
 
-// waitForConfigReloadInPod polls the pod logs for "Config reloaded successfully" message
-func waitForConfigReloadInPod(t *testing.T, namespace, podName, configMapName string, startTime time.Time) {
+// waitForConfigReloadInPod polls recent pod logs until reload_count exceeds baselineReloadCount.
+func waitForConfigReloadInPod(t *testing.T, namespace, podName string, baselineReloadCount int) {
 	kubectlCmd := getKubectlCmd(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
-		logs, err := getPodLogsSince(kubectlCmd, namespace, podName, startTime)
+		logs, err := getPodLogsTail(kubectlCmd, namespace, podName, configReloadLogTailLines)
 		if err != nil {
 			return false, nil // Continue polling
 		}
 
-		if strings.Contains(logs, config.ConfigReloadedMessage) {
+		if configReloadObservedSincePatch(logs, baselineReloadCount) {
 			return true, nil
 		}
 
@@ -119,18 +127,37 @@ func waitForConfigReloadInPod(t *testing.T, namespace, podName, configMapName st
 	}
 }
 
-// getPodLogsSince gets pod logs since a given timestamp
-func getPodLogsSince(kubectlCmd, namespace, podName string, sinceTime time.Time) (string, error) {
-	// Use --since-time to get logs after the specified time
-	// Format: RFC3339 (e.g., 2006-01-02T15:04:05Z07:00)
-	sinceTimeStr := sinceTime.Format(time.RFC3339)
-	args := []string{"-n", namespace, "logs", podName, "--since-time", sinceTimeStr}
+func configReloadObservedSincePatch(logs string, baselineReloadCount int) bool {
+	return maxReloadCountOnConfigReloadLines(logs) > baselineReloadCount
+}
+
+func maxReloadCountOnConfigReloadLines(logs string) int {
+	lines := strings.Split(logs, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := lines[i]
+		if !strings.Contains(line, config.ConfigReloadedMessage) {
+			continue
+		}
+		m := configReloadReloadCountRe.FindStringSubmatch(line)
+		if len(m) < 2 {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			continue
+		}
+		return n
+	}
+	return 0
+}
+
+func getPodLogsTail(kubectlCmd, namespace, podName string, tailLines int) (string, error) {
+	args := []string{"-n", namespace, "logs", podName, "--tail", strconv.Itoa(tailLines)}
 	cmd := exec.Command(kubectlCmd, args...)
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-
 	return string(output), nil
 }
 

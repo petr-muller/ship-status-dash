@@ -6,12 +6,13 @@ import (
 	"encoding/hex"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
-// ConfigReloadedMessage is the log message emitted when a config is successfully reloaded.
+// ConfigReloadedMessage is the log message emitted after a config reload and all OnUpdate callbacks have run.
 const ConfigReloadedMessage = "Config reloaded successfully"
 
 // DefaultPollInterval is the default interval at which the config file is checked for changes.
@@ -27,6 +28,9 @@ type Manager[T any] struct {
 	updateCallbacks []func(*T)
 	lastHash        string
 	pollInterval    time.Duration
+	// reloadCount is the number of times the config has been reloaded.
+	// It is helpful in e2e testing when we are waiting/verifying reloads.
+	reloadCount atomic.Uint64
 }
 
 // NewManager creates a new config manager with the specified load function and poll interval.
@@ -116,13 +120,17 @@ func (m *Manager[T]) reloadIfChanged() {
 	callbacks := make([]func(*T), len(m.updateCallbacks))
 	copy(callbacks, m.updateCallbacks)
 
-	m.logger.WithField("config_path", m.configPath).Info(ConfigReloadedMessage)
-
 	// Release lock before calling callbacks to avoid holding lock during potentially slow operations
 	m.mu.Unlock()
 	for _, callback := range callbacks {
 		callback(newConfig)
 	}
+
+	n := m.reloadCount.Add(1)
+	m.logger.WithFields(logrus.Fields{
+		"config_path":  m.configPath,
+		"reload_count": n,
+	}).Info(ConfigReloadedMessage)
 }
 
 // OnUpdate registers a callback function that will be called when the configuration is updated.

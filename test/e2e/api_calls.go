@@ -36,6 +36,24 @@ func getStatus(t *testing.T, client *TestHTTPClient, componentName, subComponent
 	return status
 }
 
+// tryGetComponentStatus returns aggregate status for a component without asserting on HTTP status.
+// It is intended for polling until status changes (e.g. after config reload).
+func tryGetComponentStatus(client *TestHTTPClient, componentName string) (types.Status, bool) {
+	resp, err := client.Get(fmt.Sprintf("/api/status/%s", utils.Slugify(componentName)), false)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", false
+	}
+	var status types.ComponentStatus
+	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
+		return "", false
+	}
+	return status.Status, true
+}
+
 // getComponents is a helper function to get all components and do basic assertions
 func getComponents(t *testing.T, client *TestHTTPClient) []types.Component {
 	resp, err := client.Get("/api/components", false)

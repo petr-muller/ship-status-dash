@@ -270,6 +270,15 @@ func main() {
 		log,
 	)
 
+	if err := outageManager.ResolveActiveOutagesForMissingSubComponents(configManager.Get(), outage.ConfigReloadResolverUser); err != nil {
+		log.WithField("error", err).Error("Failed to resolve outages for sub-components removed from configuration")
+	}
+	configManager.OnUpdate(func(newConfig *types.DashboardConfig) {
+		if err := outageManager.ResolveActiveOutagesForMissingSubComponents(newConfig, outage.ConfigReloadResolverUser); err != nil {
+			log.WithField("error", err).Error("Failed to resolve outages after config reload")
+		}
+	})
+
 	pingRepo := repositories.NewGORMComponentPingRepository(db)
 	server := NewServer(configManager, log, opts.CORSOrigin, hmacSecret, groupCache, outageManager, pingRepo)
 

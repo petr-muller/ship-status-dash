@@ -35,6 +35,7 @@ type MockOutageRepository struct {
 	OutageByIDError           error
 	ActiveOutagesForSubComp   []types.Outage
 	ActiveOutagesForComponent []types.Outage
+	AllActiveOutages          []types.Outage
 	OutageAuditLogs           []types.OutageAuditLog
 }
 
@@ -135,6 +136,13 @@ func (m *MockOutageRepository) GetActiveOutagesForSubComponent(componentSlug, su
 
 func (m *MockOutageRepository) GetActiveOutagesForComponent(componentSlug string) ([]types.Outage, error) {
 	return m.ActiveOutagesForComponent, nil
+}
+
+func (m *MockOutageRepository) GetAllActiveOutages() ([]types.Outage, error) {
+	if m.ActiveOutagesError != nil {
+		return nil, m.ActiveOutagesError
+	}
+	return m.AllActiveOutages, nil
 }
 
 func (m *MockOutageRepository) DeleteOutage(outage *types.Outage, user string) error {

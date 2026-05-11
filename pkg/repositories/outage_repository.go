@@ -22,6 +22,8 @@ type OutageRepository interface {
 	GetOutagesForComponent(componentSlug string, subComponentSlugs []string) ([]types.Outage, error)
 	GetActiveOutagesForSubComponent(componentSlug, subComponentSlug string) ([]types.Outage, error)
 	GetActiveOutagesForComponent(componentSlug string) ([]types.Outage, error)
+	// GetAllActiveOutages returns active outages across all components (same active definition as GetActiveOutagesForComponent).
+	GetAllActiveOutages() ([]types.Outage, error)
 	GetActiveOutagesCreatedBy(componentSlug, subComponentSlug, createdBy string) ([]types.Outage, error)
 	GetActiveOutagesDiscoveredFrom(componentSlug, subComponentSlug, discoveredFrom string) ([]types.Outage, error)
 
@@ -125,6 +127,16 @@ func (r *gormOutageRepository) GetActiveOutagesForComponent(componentSlug string
 	now := time.Now().UTC()
 	err := r.db.Where("component_name = ? AND (end_time IS NULL OR end_time > ?)", componentSlug, now).
 		Order("start_time DESC").
+		Find(&outages).Error
+	return outages, err
+}
+
+// GetAllActiveOutages retrieves every outage that is still considered active (end_time IS NULL OR end_time > now UTC).
+func (r *gormOutageRepository) GetAllActiveOutages() ([]types.Outage, error) {
+	var outages []types.Outage
+	now := time.Now().UTC()
+	err := r.db.Where("end_time IS NULL OR end_time > ?", now).
+		Order("component_name, sub_component_name, start_time DESC").
 		Find(&outages).Error
 	return outages, err
 }

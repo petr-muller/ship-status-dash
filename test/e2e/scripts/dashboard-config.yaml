@@ -82,6 +82,26 @@ components:
           - gcp
     owners:
       - user: other-developer
+  # Boskos is only used for config hot-reload / orphan outage e2e (developer-owned).
+  - name: Boskos
+    description: Resource leasing for CI workloads
+    ship_team: DPTP
+    slack_reporting:
+      - channel: "#ops-testplatform"
+        severity: "Down"
+    sub_components:
+      - name: Quota
+        description: Quota state
+        tags:
+          - ci
+          - jobs
+      - name: Leases
+        description: Lease broker
+        tags:
+          - ci
+          - jobs
+    owners:
+      - user: developer
   # The Sippy component is used during the component monitor e2e tests
   - name: Sippy
     description: CI private investigator

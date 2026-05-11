@@ -84,7 +84,7 @@ func testComponents(client *TestHTTPClient) func(*testing.T) {
 	return func(t *testing.T) {
 		components := getComponents(t, client)
 
-		assert.Len(t, components, 5)
+		assert.Len(t, components, 6)
 		assert.Equal(t, "Prow", components[0].Name)
 		assert.Equal(t, "Backbone of the CI system", components[0].Description)
 		assert.Equal(t, "TestPlatform", components[0].ShipTeam)
@@ -116,22 +116,31 @@ func testComponents(client *TestHTTPClient) func(*testing.T) {
 		assert.Equal(t, "Build01", components[2].Subcomponents[0].Name)
 		assert.Equal(t, "Build02", components[2].Subcomponents[1].Name)
 
-		assert.Equal(t, "Sippy", components[3].Name)
-		assert.Equal(t, "CI private investigator", components[3].Description)
-		assert.Equal(t, "TRT", components[3].ShipTeam)
+		assert.Equal(t, "Boskos", components[3].Name)
+		assert.Equal(t, "Resource leasing for CI workloads", components[3].Description)
+		assert.Equal(t, "DPTP", components[3].ShipTeam)
 		assert.Len(t, components[3].SlackReporting, 1)
-		assert.Equal(t, "#trt-alert", components[3].SlackReporting[0].Channel)
-		assert.Equal(t, types.SeverityDown, *components[3].SlackReporting[0].Severity)
-		assert.Len(t, components[3].Subcomponents, 5)
-		assert.Equal(t, "Sippy", components[3].Subcomponents[0].Name)
-		assert.Equal(t, "api", components[3].Subcomponents[1].Name)
-		assert.Equal(t, "data-load", components[3].Subcomponents[2].Name)
+		assert.Equal(t, "#ops-testplatform", components[3].SlackReporting[0].Channel)
+		assert.Len(t, components[3].Subcomponents, 2)
+		assert.Equal(t, "Quota", components[3].Subcomponents[0].Name)
+		assert.Equal(t, "Leases", components[3].Subcomponents[1].Name)
 
-		assert.Equal(t, "Errata Reliability", components[4].Name)
-		assert.Equal(t, "Services maintained by the Errata Reliability Team", components[4].Description)
-		assert.Equal(t, "ERT", components[4].ShipTeam)
-		assert.Len(t, components[4].Subcomponents, 1)
-		assert.Equal(t, "systemd-test", components[4].Subcomponents[0].Name)
+		assert.Equal(t, "Sippy", components[4].Name)
+		assert.Equal(t, "CI private investigator", components[4].Description)
+		assert.Equal(t, "TRT", components[4].ShipTeam)
+		assert.Len(t, components[4].SlackReporting, 1)
+		assert.Equal(t, "#trt-alert", components[4].SlackReporting[0].Channel)
+		assert.Equal(t, types.SeverityDown, *components[4].SlackReporting[0].Severity)
+		assert.Len(t, components[4].Subcomponents, 5)
+		assert.Equal(t, "Sippy", components[4].Subcomponents[0].Name)
+		assert.Equal(t, "api", components[4].Subcomponents[1].Name)
+		assert.Equal(t, "data-load", components[4].Subcomponents[2].Name)
+
+		assert.Equal(t, "Errata Reliability", components[5].Name)
+		assert.Equal(t, "Services maintained by the Errata Reliability Team", components[5].Description)
+		assert.Equal(t, "ERT", components[5].ShipTeam)
+		assert.Len(t, components[5].Subcomponents, 1)
+		assert.Equal(t, "systemd-test", components[5].Subcomponents[0].Name)
 	}
 }
 
@@ -1043,11 +1052,12 @@ func testAllComponentsStatus(client *TestHTTPClient) func(*testing.T) {
 		t.Run("GET status for all components returns all components with their status", func(t *testing.T) {
 			allStatuses := getAllComponentsStatus(t, client)
 
-			// Should have exactly 5 components (Prow, Downstream CI, Build Farm, Sippy, and Errata Reliability) based on test config
-			assert.Len(t, allStatuses, 5)
+			// Prow, Downstream CI, Build Farm, Boskos, Sippy, and Errata Reliability
+			assert.Len(t, allStatuses, 6)
 			// Find Prow component
 			var prowStatus *types.ComponentStatus
 			var buildFarmStatus *types.ComponentStatus
+			var boskosStatus *types.ComponentStatus
 			for i := range allStatuses {
 				if allStatuses[i].ComponentName == prowComponentName {
 					prowStatus = &allStatuses[i]
@@ -1055,13 +1065,19 @@ func testAllComponentsStatus(client *TestHTTPClient) func(*testing.T) {
 				if allStatuses[i].ComponentName == "Build Farm" {
 					buildFarmStatus = &allStatuses[i]
 				}
+				if allStatuses[i].ComponentName == "Boskos" {
+					boskosStatus = &allStatuses[i]
+				}
 			}
 			require.NotNil(t, prowStatus, "Prow component should be present")
 			require.NotNil(t, buildFarmStatus, "Build Farm component should be present")
+			require.NotNil(t, boskosStatus, "Boskos component should be present")
 			assert.Equal(t, types.StatusHealthy, prowStatus.Status)
 			assert.Empty(t, prowStatus.ActiveOutages)
 			assert.Equal(t, types.StatusHealthy, buildFarmStatus.Status)
 			assert.Empty(t, buildFarmStatus.ActiveOutages)
+			assert.Equal(t, types.StatusHealthy, boskosStatus.Status)
+			assert.Empty(t, boskosStatus.ActiveOutages)
 		})
 
 		t.Run("GET status for all components with outages shows correct statuses", func(t *testing.T) {
@@ -1082,8 +1098,8 @@ func testAllComponentsStatus(client *TestHTTPClient) func(*testing.T) {
 
 			allStatuses := getAllComponentsStatus(t, client)
 
-			// Should have exactly 5 components (Prow, Downstream CI, Build Farm, Sippy, and Errata Reliability)
-			assert.Len(t, allStatuses, 5)
+			// Prow, Downstream CI, Build Farm, Boskos, Sippy, and Errata Reliability
+			assert.Len(t, allStatuses, 6)
 			// Find Prow component
 			var prowStatus *types.ComponentStatus
 			for i := range allStatuses {
@@ -1105,8 +1121,7 @@ func testAllComponentsStatus(client *TestHTTPClient) func(*testing.T) {
 
 			allStatuses := getAllComponentsStatus(t, client)
 
-			// Should have exactly 5 components (Prow, Downstream CI, Build Farm, Sippy, and Errata Reliability)
-			assert.Len(t, allStatuses, 5)
+			assert.Len(t, allStatuses, 6)
 			// Find Prow component
 			var prowStatus *types.ComponentStatus
 			for i := range allStatuses {
@@ -1129,8 +1144,7 @@ func testAllComponentsStatus(client *TestHTTPClient) func(*testing.T) {
 
 			allStatuses := getAllComponentsStatus(t, client)
 
-			// Should have exactly 5 components (Prow, Downstream CI, Build Farm, Sippy, and Errata Reliability)
-			assert.Len(t, allStatuses, 5)
+			assert.Len(t, allStatuses, 6)
 			// Find Prow component
 			var prowStatus *types.ComponentStatus
 			for i := range allStatuses {
@@ -1161,8 +1175,7 @@ func testAllComponentsStatus(client *TestHTTPClient) func(*testing.T) {
 
 			allStatuses := getAllComponentsStatus(t, client)
 
-			// Should have exactly 5 components (Prow, Downstream CI, Build Farm, Sippy, and Errata Reliability)
-			assert.Len(t, allStatuses, 5)
+			assert.Len(t, allStatuses, 6)
 			// Find Prow component
 			var prowStatus *types.ComponentStatus
 			for i := range allStatuses {
@@ -1209,8 +1222,8 @@ func testListSubComponents(client *TestHTTPClient) func(*testing.T) {
 	return func(t *testing.T) {
 		t.Run("no filters returns all sub-components", func(t *testing.T) {
 			subs := getSubComponents(t, client, "", "", "")
-			// E2E config: Prow 4 + Downstream CI 1 + Build Farm 2 + Sippy 5 + Errata Reliability 1 = 13
-			assert.Len(t, subs, 13)
+			// Prow 4 + Downstream CI 1 + Build Farm 2 + Boskos 2 + Sippy 5 + Errata Reliability 1
+			assert.Len(t, subs, 15)
 		})
 		t.Run("componentName filter returns only that component's sub-components", func(t *testing.T) {
 			subs := getSubComponents(t, client, "prow", "", "")
@@ -1238,13 +1251,13 @@ func testListSubComponents(client *TestHTTPClient) func(*testing.T) {
 
 		t.Run("tag filter returns sub-components from different components for same tag", func(t *testing.T) {
 			subs := getSubComponents(t, client, "", "jobs", "")
-			// tag "jobs": Prow (Plank), Downstream CI (Retester), Build Farm (Build01, Build02)
-			assert.Len(t, subs, 4)
+			// tag "jobs": Prow (Plank), Downstream CI (Retester), Build Farm (Build01, Build02), Boskos (Quota, Leases)
+			assert.Len(t, subs, 6)
 			names := make([]string, len(subs))
 			for i := range subs {
 				names[i] = subs[i].Name
 			}
-			assert.ElementsMatch(t, []string{"Plank", "Retester", "Build01", "Build02"}, names)
+			assert.ElementsMatch(t, []string{"Plank", "Retester", "Build01", "Build02", "Quota", "Leases"}, names)
 		})
 		t.Run("non-matching tag returns empty", func(t *testing.T) {
 			subs := getSubComponents(t, client, "", "nonexistent-tag", "")
@@ -1324,8 +1337,8 @@ func testUser(client *TestHTTPClient) func(*testing.T) {
 			assert.Equal(t, "developer", userResponse.Username)
 			// Components should be a slice (can be empty)
 			assert.NotNil(t, userResponse.Components)
-			// Developer should only have access to Prow, not Build Farm
 			assert.Contains(t, userResponse.Components, utils.Slugify("Prow"), "developer should have access to Prow")
+			assert.Contains(t, userResponse.Components, utils.Slugify("Boskos"), "developer should have access to Boskos")
 			assert.NotContains(t, userResponse.Components, utils.Slugify("Build Farm"), "developer should not have access to Build Farm")
 		})
 	}
@@ -2173,6 +2186,46 @@ func testConfigHotReload(client *TestHTTPClient) func(*testing.T) {
 			assert.Equal(t, "A test component for hot-reload", testComponent.Description)
 			assert.Len(t, testComponent.Subcomponents, 1)
 			assert.Equal(t, "TestSub", testComponent.Subcomponents[0].Name)
+		})
+
+		t.Run("removing sub-component with active outage resolves orphan and component becomes Healthy", func(t *testing.T) {
+			createOutage(t, client, "Boskos", "Leases")
+
+			statusBefore := getStatus(t, client, "Boskos", "")
+			assert.Equal(t, types.StatusPartial, statusBefore.Status, "expected Partial when one of two sub-components has an active outage")
+
+			updateDashboardConfig(t, func(config *types.DashboardConfig) {
+				var boskosFound bool
+				for _, comp := range config.Components {
+					if comp.Name != "Boskos" {
+						continue
+					}
+					boskosFound = true
+					var kept []types.SubComponent
+					for _, sub := range comp.Subcomponents {
+						if sub.Name != "Leases" {
+							kept = append(kept, sub)
+						}
+					}
+					comp.Subcomponents = kept
+					break
+				}
+				require.True(t, boskosFound, "Boskos component should exist in config")
+			})
+
+			ctx := context.Background()
+			err := wait.PollUntilContextTimeout(ctx, 500*time.Millisecond, 90*time.Second, true, func(ctx context.Context) (bool, error) {
+				st, ok := tryGetComponentStatus(client, "Boskos")
+				if !ok {
+					return false, nil
+				}
+				return st == types.StatusHealthy, nil
+			})
+			require.NoError(t, err, "Boskos should become Healthy after removed sub-component's outage is resolved")
+
+			finalStatus := getStatus(t, client, "Boskos", "")
+			assert.Equal(t, types.StatusHealthy, finalStatus.Status)
+			assert.Empty(t, finalStatus.ActiveOutages)
 		})
 	}
 }
