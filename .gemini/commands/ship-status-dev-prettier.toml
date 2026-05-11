@@ -1,0 +1,2 @@
+description = "Run eslint and prettier on the frontend"
+prompt = "# Ship Status dev — prettier\n\nRun eslint and prettier on the frontend directory:\n\n```bash\ncd frontend && npx eslint . --fix && npx prettier --write .\n```\n\nSave the result after running."

@@ -1,0 +1,83 @@
+lockfile_version: '1'
+generated_at: '2026-04-30T19:32:55.853038+00:00'
+dependencies: []
+local_deployed_files:
+- .claude/commands/ship-status-dev-app.md
+- .claude/commands/ship-status-dev-e2e.md
+- .claude/commands/ship-status-dev-frontend.md
+- .claude/commands/ship-status-dev-lint.md
+- .claude/commands/ship-status-dev-migrate.md
+- .claude/commands/ship-status-dev-prettier.md
+- .claude/commands/ship-status-dev-serve.md
+- .claude/commands/ship-status-dev-setup.md
+- .claude/commands/ship-status-dev-tests.md
+- .claude/rules/backend.md
+- .claude/rules/dev-commands.md
+- .claude/rules/frontend.md
+- .claude/rules/general.md
+- .claude/rules/mcp.md
+- .claude/rules/testing.md
+- .cursor/rules/backend.mdc
+- .cursor/rules/dev-commands.mdc
+- .cursor/rules/frontend.mdc
+- .cursor/rules/general.mdc
+- .cursor/rules/mcp.mdc
+- .cursor/rules/testing.mdc
+- .gemini/commands/ship-status-dev-app.toml
+- .gemini/commands/ship-status-dev-e2e.toml
+- .gemini/commands/ship-status-dev-frontend.toml
+- .gemini/commands/ship-status-dev-lint.toml
+- .gemini/commands/ship-status-dev-migrate.toml
+- .gemini/commands/ship-status-dev-prettier.toml
+- .gemini/commands/ship-status-dev-serve.toml
+- .gemini/commands/ship-status-dev-setup.toml
+- .gemini/commands/ship-status-dev-tests.toml
+- .opencode/commands/ship-status-dev-app.md
+- .opencode/commands/ship-status-dev-e2e.md
+- .opencode/commands/ship-status-dev-frontend.md
+- .opencode/commands/ship-status-dev-lint.md
+- .opencode/commands/ship-status-dev-migrate.md
+- .opencode/commands/ship-status-dev-prettier.md
+- .opencode/commands/ship-status-dev-serve.md
+- .opencode/commands/ship-status-dev-setup.md
+- .opencode/commands/ship-status-dev-tests.md
+local_deployed_file_hashes:
+  .claude/commands/ship-status-dev-app.md: sha256:78270bf690d065f32d561df64c1502b7abc71efbe255bcaaa0d563db7147c5f5
+  .claude/commands/ship-status-dev-e2e.md: sha256:78f1ad93a91934b5f9979e4919d26a3dab21a66a03ece542a7676e19c1b602a2
+  .claude/commands/ship-status-dev-frontend.md: sha256:752f4efd91d857927d7bcc26ee8e5f8c836ec9a85c8d70ec77c176a9add9ec1f
+  .claude/commands/ship-status-dev-lint.md: sha256:c808f3e457941b90e564553fda8435ad8f87bdbc87d4523a03d0b8ef189e40e7
+  .claude/commands/ship-status-dev-migrate.md: sha256:636507ec2efa52bcd48ba6c826dd78a4dc2bdeff479f5cea8e9ef07162010314
+  .claude/commands/ship-status-dev-prettier.md: sha256:e1be3c6c942a184385a52d932ee69d46b3ee7303ef1aede2f16068026a41719b
+  .claude/commands/ship-status-dev-serve.md: sha256:6b256c047c9b58e1f270d1913a8720d499e5f0a2e7813b6b7a24802cb816e8fd
+  .claude/commands/ship-status-dev-setup.md: sha256:359771841484ded65fbc55a1fd3700697202dc208803775a2c9a27ea5e179893
+  .claude/commands/ship-status-dev-tests.md: sha256:a0726615763f8abfbed887949914ecb9f37dd6beb11ce0f1134d93608005c0c2
+  .claude/rules/backend.md: sha256:d14c028a02eb4309b390a131baabf3201ecdd19434af3c7e4918ab2004dff1d8
+  .claude/rules/dev-commands.md: sha256:e9fc8988b221ee2cddfed630a7d20267b3c6253cefc1c3ad37b865bb3930cf0f
+  .claude/rules/frontend.md: sha256:8edb5811fee9d843f682aee9b9ff45c296814ba4cd77751cf55c1b322d452347
+  .claude/rules/general.md: sha256:46ab978a15c965366b09092a64b22cd6fadafe7418d7f9309f80a00be392e49b
+  .claude/rules/mcp.md: sha256:aa2010a76fbd5fcd785084a7c11f19833716d61277adda218abd024ff3f00d32
+  .claude/rules/testing.md: sha256:53fb5c7bb3090305af7c8ee823bf3150dc93c1c7e8bfbd9f9f999ce61e4b46e7
+  .cursor/rules/backend.mdc: sha256:2e45e67899c46788e7e9f584f030cffbf1d5cbbbe64dd6c8b4e971b0a6ebe8b5
+  .cursor/rules/dev-commands.mdc: sha256:ed192287ec9a297b123abfc493447bcb4dbad77091965900a8f01373d037a90a
+  .cursor/rules/frontend.mdc: sha256:123f283c5380d202f2cd5372bccff6b95de1b9f2c9e7213fb6aaefaf1276daa7
+  .cursor/rules/general.mdc: sha256:72d62b0f9bea63d8fd80403c3c9120ff32c44121c9a3b626bb2a665f7732a1a6
+  .cursor/rules/mcp.mdc: sha256:9deb80a8e4f4711a0d30c0256fffa1495d65879f5a541169c5810b7046a4fdc9
+  .cursor/rules/testing.mdc: sha256:aa780f044737b47e96ca00fbdd3dadcf062bf8e2d2a08f44e696a17a03ea18de
+  .gemini/commands/ship-status-dev-app.toml: sha256:9156087f13a7d73cdb48b9053470a7504a4d9dc64e2048437b354d2469f502c3
+  .gemini/commands/ship-status-dev-e2e.toml: sha256:b101d8a4b13b84cc140ff642f8442dc32a6728227271b5adaf49054389cddb00
+  .gemini/commands/ship-status-dev-frontend.toml: sha256:3a8f15ccee65ba801690cdc4f8274e5f953e3e1570f4988c2c1bca631db602f1
+  .gemini/commands/ship-status-dev-lint.toml: sha256:11b98a8799556c6a0d98aa492f672f680f170bf1c9fb7d0dffcb72ad139eff16
+  .gemini/commands/ship-status-dev-migrate.toml: sha256:1ee5aab78291727c1f113563fd18515c5e1734fe85a0877cd5906cdc0b96e2ab
+  .gemini/commands/ship-status-dev-prettier.toml: sha256:1b6ba798dbf8e0726375bacd904100d86b6c807a4e72876e9c4b2fc8f21ec615
+  .gemini/commands/ship-status-dev-serve.toml: sha256:a07c8fa5a850f670c149d3aa9e50911403266ffd3481d1c3d13e091745b5057f
+  .gemini/commands/ship-status-dev-setup.toml: sha256:a63bd48cf6f52858d11754cafc32e55906166e588757dbb6f7077390646578f9
+  .gemini/commands/ship-status-dev-tests.toml: sha256:80974b1ce63335fde893b1195c97936b002334469910a7dddd65a2fedb956b00
+  .opencode/commands/ship-status-dev-app.md: sha256:78270bf690d065f32d561df64c1502b7abc71efbe255bcaaa0d563db7147c5f5
+  .opencode/commands/ship-status-dev-e2e.md: sha256:78f1ad93a91934b5f9979e4919d26a3dab21a66a03ece542a7676e19c1b602a2
+  .opencode/commands/ship-status-dev-frontend.md: sha256:752f4efd91d857927d7bcc26ee8e5f8c836ec9a85c8d70ec77c176a9add9ec1f
+  .opencode/commands/ship-status-dev-lint.md: sha256:c808f3e457941b90e564553fda8435ad8f87bdbc87d4523a03d0b8ef189e40e7
+  .opencode/commands/ship-status-dev-migrate.md: sha256:636507ec2efa52bcd48ba6c826dd78a4dc2bdeff479f5cea8e9ef07162010314
+  .opencode/commands/ship-status-dev-prettier.md: sha256:e1be3c6c942a184385a52d932ee69d46b3ee7303ef1aede2f16068026a41719b
+  .opencode/commands/ship-status-dev-serve.md: sha256:6b256c047c9b58e1f270d1913a8720d499e5f0a2e7813b6b7a24802cb816e8fd
+  .opencode/commands/ship-status-dev-setup.md: sha256:359771841484ded65fbc55a1fd3700697202dc208803775a2c9a27ea5e179893
+  .opencode/commands/ship-status-dev-tests.md: sha256:a0726615763f8abfbed887949914ecb9f37dd6beb11ce0f1134d93608005c0c2

@@ -25,7 +25,7 @@ Before starting the frontend, ensure the backend services are running:
    npm start
    ```
 
-The app will open at [http://localhost:3000](http://localhost:3000).
+The app will open at [http://localhost:3030](http://localhost:3030).
 
 **Note:** The backend provides two routes:
 
@@ -41,7 +41,7 @@ In the project directory, you can run:
 ### `npm start`
 
 Runs the app in development mode using Vite.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+Open [http://localhost:3030](http://localhost:3030) to view it in the browser.
 
 The page will reload if you make edits.\
 You will also see any lint errors in the console.

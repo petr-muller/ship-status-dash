@@ -4,6 +4,18 @@ reviews:
   path_filters:
   - "!vendor/**"
   - "!go.sum"
+  - "!CLAUDE.md"
+  - "!AGENTS.md"
+  - "!GEMINI.md"
+  - "!frontend/CLAUDE.md"
+  - "!frontend/AGENTS.md"
+  - "!mcp/CLAUDE.md"
+  - "!mcp/AGENTS.md"
+  - "!.claude/**"
+  - "!.cursor/**"
+  - "!.gemini/**"
+  - "!.opencode/**"
+  - "!apm.lock.yaml"
   profile: chill
   request_changes_workflow: false
   high_level_summary: true

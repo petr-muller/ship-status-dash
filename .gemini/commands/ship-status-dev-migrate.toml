@@ -1,0 +1,2 @@
+description = "Run Ship Status Dashboard database migrations"
+prompt = "# Ship Status dev — migrate\n\nUse the **`run_migrate`** MCP tool (server: **`ship-status-dev`**). The tool runs:\n\n```bash\ngo run ./cmd/migrate --dsn \"$SHIP_STATUS_DSN\"\n```\n\nIf `SHIP_STATUS_DSN` is not set, it uses the dev default:\n\n```text\npostgres://postgres:password@localhost:5433/ship_status?sslmode=disable\n```\n\nLog: **`ship-status-dev-logs/run_migrate.log`**.\n\nNote: migrations are also run automatically by `dashboard_serve` and during devcontainer setup."

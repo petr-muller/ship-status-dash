@@ -4,55 +4,113 @@ set -e
 
 POSTGRES_CONTAINER_NAME="ship-status-test-db"
 PROMETHEUS_CONTAINER_NAME="prometheus-e2e"
-DB_PORT="5433"
 DB_USER="postgres"
 DB_PASSWORD="testpass"
-DB_NAME="ship_status_test"
+DB_NAME="ship_status_e2e_$$"
+# Devcontainer Postgres on ship-status-net (fixed host/port; see .devcontainer/init-services.sh).
+E2E_PG_HOST=ship-status-postgres
+E2E_PG_PORT=5432
+
+# Detect whether to run services natively or in containers.
+# PostgreSQL: that devcontainer service if reachable, otherwise a throwaway podman DB.
+# Prometheus: use native binary if available, otherwise container.
+USE_EXISTING_POSTGRES=false
+USE_NATIVE_PROMETHEUS=false
+STARTED_POSTGRES_CONTAINER=false
+
+if command -v prometheus > /dev/null 2>&1; then
+  USE_NATIVE_PROMETHEUS=true
+fi
+
+if command -v psql > /dev/null 2>&1; then
+  if psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "SELECT 1" > /dev/null 2>&1; then
+    USE_EXISTING_POSTGRES=true
+  fi
+fi
+
+DOCKER=${DOCKER:-podman}
+if [ "$USE_EXISTING_POSTGRES" = false ] || [ "$USE_NATIVE_PROMETHEUS" = false ]; then
+  if ! command -v "$DOCKER" > /dev/null 2>&1; then
+    echo "Missing native binaries and $DOCKER not available."
+    [ "$USE_EXISTING_POSTGRES" = false ] && echo "  PostgreSQL: unreachable at ${E2E_PG_HOST}:${E2E_PG_PORT} (devcontainer) and no $DOCKER for a throwaway DB"
+    [ "$USE_NATIVE_PROMETHEUS" = false ] && echo "  Prometheus: need prometheus binary OR $DOCKER"
+    exit 1
+  fi
+fi
+
+# If we need a container for PostgreSQL, find a free port
+if [ "$USE_EXISTING_POSTGRES" = false ]; then
+  DB_PORT=""
+  for port in {5434..5450}; do
+    if ! lsof -i :$port > /dev/null 2>&1; then
+      DB_PORT=$port
+      break
+    fi
+  done
+  if [ -z "$DB_PORT" ]; then
+    echo "No available port found in range 5434-5450 for PostgreSQL"
+    exit 1
+  fi
+fi
+
+NATIVE_PROMETHEUS_DATA=""
 
 cleanup() {
   echo "Cleaning up component-monitor processes..."
-  # Kill by PID first if we have it
   if [ ! -z "$COMPONENT_MONITOR_PID" ]; then
     kill -TERM $COMPONENT_MONITOR_PID 2>/dev/null || true
     sleep 1
     kill -KILL $COMPONENT_MONITOR_PID 2>/dev/null || true
   fi
-  # Also kill all component-monitor processes by pattern to catch any orphaned processes
   pkill -TERM -f "component-monitor.*e2e-component-monitor" 2>/dev/null || true
   sleep 1
   pkill -KILL -f "component-monitor.*e2e-component-monitor" 2>/dev/null || true
 
-  # It seems important to stop the Prometheus container prior to stopping the mock-monitored-component, apparently podman can crash otherwise.
-  echo "Stopping Prometheus container..."
-  if podman ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${PROMETHEUS_CONTAINER_NAME}$" 2>/dev/null; then
-    podman stop "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
-    podman rm -f "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
+  echo "Stopping Prometheus..."
+  if [ "$USE_NATIVE_PROMETHEUS" = true ]; then
+    if [ ! -z "$PROMETHEUS_PID" ]; then
+      kill -TERM $PROMETHEUS_PID 2>/dev/null || true
+      sleep 1
+      kill -KILL $PROMETHEUS_PID 2>/dev/null || true
+    fi
+    if [ ! -z "$NATIVE_PROMETHEUS_DATA" ] && [ -d "$NATIVE_PROMETHEUS_DATA" ]; then
+      rm -rf "$NATIVE_PROMETHEUS_DATA"
+    fi
+  else
+    if $DOCKER ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${PROMETHEUS_CONTAINER_NAME}$" 2>/dev/null; then
+      $DOCKER stop "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
+      $DOCKER rm -f "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
+    fi
   fi
-  
+
   echo "Cleaning up mock-monitored-component processes..."
   if [ ! -z "$MOCK_MONITORED_COMPONENT_PORT" ]; then
     lsof -ti :$MOCK_MONITORED_COMPONENT_PORT | xargs kill -TERM 2>/dev/null || true
     sleep 1
     lsof -ti :$MOCK_MONITORED_COMPONENT_PORT | xargs kill -KILL 2>/dev/null || true
   fi
-  
+
   echo "Cleaning up proxy processes..."
   if [ ! -z "$PROXY_PORT" ]; then
     lsof -ti :$PROXY_PORT | xargs kill -TERM 2>/dev/null || true
     sleep 1
     lsof -ti :$PROXY_PORT | xargs kill -KILL 2>/dev/null || true
   fi
-  
+
   echo "Cleaning up dashboard processes..."
   if [ ! -z "$DASHBOARD_PORT" ]; then
     lsof -ti :$DASHBOARD_PORT | xargs kill -TERM 2>/dev/null || true
     sleep 1
     lsof -ti :$DASHBOARD_PORT | xargs kill -KILL 2>/dev/null || true
   fi
-  
-  echo "Cleaning up postgres container..."
-  podman rm -f $POSTGRES_CONTAINER_NAME > /dev/null 2>&1 || true
-  
+
+  echo "Cleaning up postgres..."
+  if [ "$USE_EXISTING_POSTGRES" = true ]; then
+    psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "DROP DATABASE IF EXISTS $DB_NAME;" > /dev/null 2>&1 || true
+  elif [ "$STARTED_POSTGRES_CONTAINER" = true ]; then
+    $DOCKER rm -f $POSTGRES_CONTAINER_NAME > /dev/null 2>&1 || true
+  fi
+
   echo "Cleaning up temporary files..."
   if [ ! -z "$DASHBOARD_CONFIG" ]; then
     rm -f "$DASHBOARD_CONFIG" 2>/dev/null || true
@@ -70,40 +128,52 @@ cleanup() {
 
 trap cleanup EXIT
 
-echo "Starting PostgreSQL container..."
-# Remove any existing container first
-if podman ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${POSTGRES_CONTAINER_NAME}$" 2>/dev/null; then
-  podman rm -f $POSTGRES_CONTAINER_NAME > /dev/null 2>&1 || true
+# --- PostgreSQL ---
+if [ "$USE_EXISTING_POSTGRES" = true ]; then
+  echo "Using PostgreSQL at ${E2E_PG_HOST}:${E2E_PG_PORT} (ephemeral database $DB_NAME)..."
+  echo "Creating test database $DB_NAME..."
+  psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "DROP DATABASE IF EXISTS $DB_NAME;" > /dev/null 2>&1 || true
+  psql "postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/postgres?sslmode=disable" -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1
+else
+  echo "Starting PostgreSQL container on port $DB_PORT..."
+  if $DOCKER ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${POSTGRES_CONTAINER_NAME}$" 2>/dev/null; then
+    $DOCKER rm -f $POSTGRES_CONTAINER_NAME > /dev/null 2>&1 || true
+  fi
+
+  $DOCKER run -d \
+    --name $POSTGRES_CONTAINER_NAME \
+    -e POSTGRES_PASSWORD=$DB_PASSWORD \
+    -p $DB_PORT:5432 \
+    quay.io/enterprisedb/postgresql:latest
+  STARTED_POSTGRES_CONTAINER=true
+
+  echo "Waiting for PostgreSQL to be ready..."
+  for i in {1..30}; do
+    if $DOCKER exec $POSTGRES_CONTAINER_NAME pg_isready -U $DB_USER > /dev/null 2>&1; then
+      echo "PostgreSQL is ready"
+      break
+    fi
+    if [ $i -eq 30 ]; then
+      echo "PostgreSQL failed to start"
+      $DOCKER logs $POSTGRES_CONTAINER_NAME 2>/dev/null || true
+      $DOCKER stop $POSTGRES_CONTAINER_NAME 2>/dev/null || true
+      $DOCKER rm $POSTGRES_CONTAINER_NAME 2>/dev/null || true
+      exit 1
+    fi
+    sleep 1
+  done
+
+  echo "Creating test database..."
+  if ! $DOCKER exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1; then
+    echo "Failed to create test database (may already exist, continuing...)"
+  fi
 fi
 
-podman run -d \
-  --name $POSTGRES_CONTAINER_NAME \
-  -e POSTGRES_PASSWORD=$DB_PASSWORD \
-  -p $DB_PORT:5432 \
-  quay.io/enterprisedb/postgresql:latest
-
-echo "Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
-  if podman exec $POSTGRES_CONTAINER_NAME pg_isready -U $DB_USER > /dev/null 2>&1; then
-    echo "PostgreSQL is ready"
-    break
-  fi
-  if [ $i -eq 30 ]; then
-    echo "PostgreSQL failed to start"
-    podman logs $POSTGRES_CONTAINER_NAME 2>/dev/null || true
-    podman stop $POSTGRES_CONTAINER_NAME 2>/dev/null || true
-    podman rm $POSTGRES_CONTAINER_NAME 2>/dev/null || true
-    exit 1
-  fi
-  sleep 1
-done
-
-echo "Creating test database..."
-if ! podman exec $POSTGRES_CONTAINER_NAME psql -U $DB_USER -c "CREATE DATABASE $DB_NAME;" > /dev/null 2>&1; then
-  echo "Failed to create test database (may already exist, continuing...)"
+if [ "$USE_EXISTING_POSTGRES" = true ]; then
+  DSN="postgres://$DB_USER:password@${E2E_PG_HOST}:${E2E_PG_PORT}/$DB_NAME?sslmode=disable&client_encoding=UTF8"
+else
+  DSN="postgres://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?sslmode=disable&client_encoding=UTF8"
 fi
-
-DSN="postgres://$DB_USER:$DB_PASSWORD@localhost:$DB_PORT/$DB_NAME?sslmode=disable&client_encoding=UTF8"
 export TEST_DATABASE_DSN="$DSN"
 
 echo "Running migration..."
@@ -180,7 +250,7 @@ export TEST_DASHBOARD_CONFIG_PATH="$DASHBOARD_CONFIG"
 
 # Start dashboard server in background
 unset SKIP_AUTH # make sure we are using authentication
-go run ./cmd/dashboard --config "$DASHBOARD_CONFIG" --port $DASHBOARD_PORT --dsn "$DSN" --hmac-secret-file "$HMAC_SECRET_FILE" --absent-report-check-interval 15s --config-update-poll-interval 10s --slack-base-url "http://localhost:3000" --slack-workspace-url "https://rhsandbox.slack.com/" 2> "$DASHBOARD_LOG" &
+go run ./cmd/dashboard --config "$DASHBOARD_CONFIG" --port $DASHBOARD_PORT --dsn "$DSN" --hmac-secret-file "$HMAC_SECRET_FILE" --absent-report-check-interval 15s --config-update-poll-interval 10s --slack-base-url "http://localhost:3030" --slack-workspace-url "https://rhsandbox.slack.com/" 2> "$DASHBOARD_LOG" &
 DASHBOARD_PID=$!
 
 # Wait for dashboard server to be ready
@@ -213,7 +283,7 @@ PROXY_PID=$!
 # Wait for proxy to be ready
 echo "Waiting for mock oauth-proxy to be ready..."
 for i in {1..30}; do
-  if curl -s -u developer:developer http://localhost:$PROXY_PORT/health > /dev/null 2>&1; then
+  if curl -s http://localhost:$PROXY_PORT/health > /dev/null 2>&1; then
     echo "Mock oauth-proxy is ready on port $PROXY_PORT"
     break
   fi
@@ -247,30 +317,61 @@ for i in {1..30}; do
   sleep 1
 done
 
-echo "Starting Prometheus in podman container..."
+# --- Prometheus ---
 PROMETHEUS_CONFIG_PATH="$(cd "$(dirname "$0")" && pwd)/prometheus.yml"
-# Create temporary config file with substituted values
 PROMETHEUS_CONFIG_TMP=$(mktemp)
-MOCK_MONITORED_COMPONENT_TARGET="host.containers.internal:${MOCK_MONITORED_COMPONENT_PORT}"
-export MOCK_MONITORED_COMPONENT_TARGET
-envsubst < "$PROMETHEUS_CONFIG_PATH" > "$PROMETHEUS_CONFIG_TMP"
 
-# Remove any existing container first
-if podman ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${PROMETHEUS_CONTAINER_NAME}$" 2>/dev/null; then
-  podman rm -f "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
+PROMETHEUS_LOG="/tmp/prometheus-e2e.log"
+
+if [ "$USE_NATIVE_PROMETHEUS" = true ]; then
+  echo "Starting Prometheus (native) on port $PROMETHEUS_PORT..."
+  NATIVE_PROMETHEUS_DATA=$(mktemp -d)
+
+  MOCK_MONITORED_COMPONENT_TARGET="localhost:${MOCK_MONITORED_COMPONENT_PORT}"
+  export MOCK_MONITORED_COMPONENT_TARGET
+  envsubst < "$PROMETHEUS_CONFIG_PATH" > "$PROMETHEUS_CONFIG_TMP"
+
+  prometheus \
+    --config.file="$PROMETHEUS_CONFIG_TMP" \
+    --storage.tsdb.path="$NATIVE_PROMETHEUS_DATA" \
+    --web.listen-address=":$PROMETHEUS_PORT" \
+    --web.enable-lifecycle \
+    > "$PROMETHEUS_LOG" 2>&1 &
+  PROMETHEUS_PID=$!
+else
+  echo "Starting Prometheus in container on port $PROMETHEUS_PORT..."
+
+  # Detect Docker vs Podman for correct host alias
+  DOCKER_BASENAME=$(basename "$DOCKER")
+  if [ "$DOCKER_BASENAME" = "docker" ]; then
+    CONTAINER_HOST="host.docker.internal"
+    HOST_FLAG="--add-host=host.docker.internal:host-gateway"
+  else
+    CONTAINER_HOST="host.containers.internal"
+    HOST_FLAG=""
+  fi
+
+  MOCK_MONITORED_COMPONENT_TARGET="${CONTAINER_HOST}:${MOCK_MONITORED_COMPONENT_PORT}"
+  export MOCK_MONITORED_COMPONENT_TARGET
+  envsubst < "$PROMETHEUS_CONFIG_PATH" > "$PROMETHEUS_CONFIG_TMP"
+
+  if $DOCKER ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${PROMETHEUS_CONTAINER_NAME}$" 2>/dev/null; then
+    $DOCKER rm -f "$PROMETHEUS_CONTAINER_NAME" > /dev/null 2>&1 || true
+  fi
+
+  $DOCKER run -d \
+    --name "$PROMETHEUS_CONTAINER_NAME" \
+    $HOST_FLAG \
+    -p $PROMETHEUS_PORT:9090 \
+    -v "$PROMETHEUS_CONFIG_TMP:/etc/prometheus/prometheus.yml:ro" \
+    quay.io/prometheus/prometheus:latest \
+    --config.file=/etc/prometheus/prometheus.yml \
+    --storage.tsdb.path=/prometheus \
+    --web.console.libraries=/usr/share/prometheus/console_libraries \
+    --web.console.templates=/usr/share/prometheus/consoles \
+    --web.enable-lifecycle \
+    > /dev/null 2>&1
 fi
-
-podman run -d \
-  --name "$PROMETHEUS_CONTAINER_NAME" \
-  -p $PROMETHEUS_PORT:9090 \
-  -v "$PROMETHEUS_CONFIG_TMP:/etc/prometheus/prometheus.yml:ro" \
-  quay.io/prometheus/prometheus:latest \
-  --config.file=/etc/prometheus/prometheus.yml \
-  --storage.tsdb.path=/prometheus \
-  --web.console.libraries=/usr/share/prometheus/console_libraries \
-  --web.console.templates=/usr/share/prometheus/consoles \
-  --web.enable-lifecycle \
-  > /dev/null 2>&1
 
 echo "Waiting for Prometheus to complete initial scrape..."
 for i in {1..60}; do
@@ -280,7 +381,12 @@ for i in {1..60}; do
   fi
   if [ $i -eq 60 ]; then
     echo "Prometheus failed to complete initial scrape within 60 seconds"
-    podman logs "$PROMETHEUS_CONTAINER_NAME" 2>/dev/null || true
+    if [ "$USE_NATIVE_PROMETHEUS" = true ]; then
+      echo "=== Prometheus Log (last 30 lines) ==="
+      tail -n 30 "$PROMETHEUS_LOG" 2>/dev/null || echo "No log found"
+    else
+      $DOCKER logs "$PROMETHEUS_CONTAINER_NAME" 2>/dev/null || true
+    fi
     exit 1
   fi
   sleep 1
@@ -320,7 +426,7 @@ if [ $TEST_EXIT_CODE -ne 0 ]; then
   echo "=== Component Monitor Log (last 50 lines) ==="
   tail -n 50 "$COMPONENT_MONITOR_LOG" 2>/dev/null || echo "No log found"
   echo "Full log: $COMPONENT_MONITOR_LOG"
-  
+
   echo ""
   echo "=== Dashboard Server Log (last 50 lines) ==="
   tail -n 50 "$DASHBOARD_LOG" 2>/dev/null || echo "No log found"
@@ -339,4 +445,3 @@ else
 fi
 
 exit $TEST_EXIT_CODE
-

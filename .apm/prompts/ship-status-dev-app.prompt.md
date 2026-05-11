@@ -1,0 +1,13 @@
+---
+description: "Start the full local stack (dashboard, frontend, component monitor)"
+---
+
+# Ship Status dev — full app
+
+Start the full local stack using three MCP tool calls (server: **`ship-status-dev`**). Run them in order:
+
+1. **`dashboard_serve`** — starts dashboard on port 8080 and mock-oauth-proxy on port 8443.
+2. **`component_monitor_start`** — starts mock-monitored-component (port 8081), Prometheus (port 9090), and component-monitor.
+3. **`frontend_start`** — starts Vite dev server on port 3030.
+
+Each tool returns listen hints and log paths. If a tool reports already running, ask the user if they want to restart it. If yes, call the tool again with **`restart=True`**.

@@ -14,6 +14,8 @@
 /mock-monitored-component
 /mock-oauth-proxy
 
+/ship-status-dev-logs/
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -41,3 +43,10 @@ go.work.sum
 
 # Cursor local commands
 .cursor/commands/local/
+
+
+# APM dependencies
+apm_modules/
+
+# MCP server virtualenv
+mcp/.venv/

@@ -115,7 +115,7 @@ Both processes use the same HMAC secret:
    npm start
    ```
 
-The frontend will be available at `http://localhost:3000`.
+The frontend will be available at `http://localhost:3030`.
 
 ## End-to-End Tests
 

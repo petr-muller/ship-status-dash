@@ -6,15 +6,13 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "Running golangci-lint..."
-if [ "$CI" = "true" ]; then
-    go version
-    golangci-lint version -v
+if command -v golangci-lint > /dev/null 2>&1; then
     golangci-lint "${@}"
 else
     DOCKER=${DOCKER:-podman}
 
     if ! which "$DOCKER" > /dev/null 2>&1; then
-        echo "$DOCKER not found, please install."
+        echo "golangci-lint not found and $DOCKER not available. Install golangci-lint or $DOCKER."
         exit 1
     fi
 

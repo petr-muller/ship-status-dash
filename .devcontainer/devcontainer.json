@@ -1,0 +1,61 @@
+// Podman users:
+//   1. In Cursor/VS Code settings, set: "dev.containers.dockerPath": "podman"
+//   2. Ensure "podman machine" is running (macOS/Windows)
+{
+  "name": "Ship Status Dashboard",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": ["--name", "ship-status-dev", "--network", "ship-status-net", "--env-file", ".devcontainer/.env"],
+  "mounts": [
+    "source=${localEnv:HOME}/.config/gcloud,target=/home/vscode/.config/gcloud,type=bind,readonly"
+  ],
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  "remoteUser": "vscode",
+  "initializeCommand": ".devcontainer/init-services.sh",
+  "forwardPorts": [8080, 8443, 3030, 5433, 9090],
+  "portsAttributes": {
+    "8080": { "label": "Dashboard API" },
+    "8443": { "label": "Mock OAuth Proxy" },
+    "3030": { "label": "Vite Dev Server" },
+    "5433": { "label": "PostgreSQL" },
+    "9090": { "label": "Prometheus" }
+  },
+  "containerEnv": {
+    "SHIP_STATUS_DSN": "postgres://postgres:password@ship-status-postgres:5432/ship_status?sslmode=disable"
+  },
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "go.gopath": "/home/vscode/go",
+        "go.lintTool": "golangci-lint",
+        "go.lintFlags": ["--fast"],
+        "editor.formatOnSave": true,
+        "[go]": {
+          "editor.defaultFormatter": "golang.go"
+        },
+        "[javascript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[javascriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescript]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "[typescriptreact]": {
+          "editor.defaultFormatter": "esbenp.prettier-vscode"
+        },
+        "eslint.workingDirectories": ["frontend"]
+      }
+    }
+  }
+}

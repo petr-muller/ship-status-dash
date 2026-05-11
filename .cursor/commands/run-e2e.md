@@ -1,1 +1,0 @@
-run "make local-e2e". DO NOT MODIFY THE COMMAND OR TAIL IT
