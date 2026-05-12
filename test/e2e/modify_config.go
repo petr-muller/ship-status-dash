@@ -70,10 +70,9 @@ func patchConfigMap(t *testing.T, namespace, configMapName string, configData []
 	kubectlCmd := getKubectlCmd(t)
 	podName := getPodNameForConfigMap(t, namespace, configMapName)
 
-	baselineReloadCount := 0
-	if tail, err := getPodLogsTail(kubectlCmd, namespace, podName, configReloadLogTailLines); err == nil {
-		baselineReloadCount = maxReloadCountOnConfigReloadLines(tail)
-	}
+	baselineTail, err := getPodLogsTail(kubectlCmd, namespace, podName, configReloadLogTailLines)
+	require.NoError(t, err, "failed to read pod logs for reload baseline (namespace=%s pod=%s)", namespace, podName)
+	baselineReloadCount := maxReloadCountOnConfigReloadLines(baselineTail)
 
 	patchData := map[string]interface{}{
 		"data": map[string]string{
