@@ -25,43 +25,51 @@ func TestDashboardConfig_SubComponentRefsMatching(t *testing.T) {
 		},
 	}
 
-	t.Run("no filters all refs", func(t *testing.T) {
-		got := cfg.SubComponentRefsMatching("", "", "", "")
-		assert.ElementsMatch(t, []SubComponentRef{
-			{ComponentSlug: "alpha", SubSlug: "one"},
-			{ComponentSlug: "alpha", SubSlug: "two"},
-			{ComponentSlug: "beta", SubSlug: "one"},
-		}, got)
-	})
+	tests := []struct {
+		name            string
+		componentFilter string
+		subFilter       string
+		tagFilter       string
+		teamFilter      string
+		expected        []SubComponentRef
+	}{
+		{
+			name:     "no filters all refs",
+			expected: []SubComponentRef{{ComponentSlug: "alpha", SubSlug: "one"}, {ComponentSlug: "alpha", SubSlug: "two"}, {ComponentSlug: "beta", SubSlug: "one"}},
+		},
+		{
+			name:            "component filter",
+			componentFilter: "alpha",
+			expected:        []SubComponentRef{{ComponentSlug: "alpha", SubSlug: "one"}, {ComponentSlug: "alpha", SubSlug: "two"}},
+		},
+		{
+			name:       "team filter",
+			teamFilter: "team-b",
+			expected:   []SubComponentRef{{ComponentSlug: "beta", SubSlug: "one"}},
+		},
+		{
+			name:      "tag filter",
+			tagFilter: "net",
+			expected:  []SubComponentRef{{ComponentSlug: "alpha", SubSlug: "one"}, {ComponentSlug: "beta", SubSlug: "one"}},
+		},
+		{
+			name:            "component and sub slug",
+			componentFilter: "beta",
+			subFilter:       "one",
+			expected:        []SubComponentRef{{ComponentSlug: "beta", SubSlug: "one"}},
+		},
+		{
+			name:            "component tag and",
+			componentFilter: "alpha",
+			tagFilter:       "ci",
+			expected:        []SubComponentRef{{ComponentSlug: "alpha", SubSlug: "one"}},
+		},
+	}
 
-	t.Run("component filter", func(t *testing.T) {
-		got := cfg.SubComponentRefsMatching("alpha", "", "", "")
-		assert.ElementsMatch(t, []SubComponentRef{
-			{ComponentSlug: "alpha", SubSlug: "one"},
-			{ComponentSlug: "alpha", SubSlug: "two"},
-		}, got)
-	})
-
-	t.Run("team filter", func(t *testing.T) {
-		got := cfg.SubComponentRefsMatching("", "", "", "team-b")
-		assert.Equal(t, []SubComponentRef{{ComponentSlug: "beta", SubSlug: "one"}}, got)
-	})
-
-	t.Run("tag filter", func(t *testing.T) {
-		got := cfg.SubComponentRefsMatching("", "", "net", "")
-		assert.ElementsMatch(t, []SubComponentRef{
-			{ComponentSlug: "alpha", SubSlug: "one"},
-			{ComponentSlug: "beta", SubSlug: "one"},
-		}, got)
-	})
-
-	t.Run("component and sub slug", func(t *testing.T) {
-		got := cfg.SubComponentRefsMatching("beta", "one", "", "")
-		assert.Equal(t, []SubComponentRef{{ComponentSlug: "beta", SubSlug: "one"}}, got)
-	})
-
-	t.Run("component tag and", func(t *testing.T) {
-		got := cfg.SubComponentRefsMatching("alpha", "", "ci", "")
-		assert.Equal(t, []SubComponentRef{{ComponentSlug: "alpha", SubSlug: "one"}}, got)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cfg.SubComponentRefsMatching(tt.componentFilter, tt.subFilter, tt.tagFilter, tt.teamFilter)
+			assert.ElementsMatch(t, tt.expected, got)
+		})
+	}
 }

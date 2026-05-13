@@ -32,8 +32,11 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	}
 	t.Cleanup(func() {
 		sqlDB, err := db.DB()
-		if err == nil {
-			sqlDB.Close()
+		if err != nil {
+			t.Fatalf("test database sql.DB: %v", err)
+		}
+		if err := sqlDB.Close(); err != nil {
+			t.Fatalf("test database close: %v", err)
 		}
 	})
 	return db

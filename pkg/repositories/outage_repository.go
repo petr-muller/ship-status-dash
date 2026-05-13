@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 
@@ -175,8 +176,10 @@ func (r *gormOutageRepository) GetOutagesDuring(queryStart, queryEnd time.Time, 
 	}
 	q = q.Where("("+strings.Join(conds, " OR ")+")", args...)
 	var outages []types.Outage
-	err := q.Order("start_time DESC").Find(&outages).Error
-	return outages, err
+	if err := q.Order("start_time DESC").Find(&outages).Error; err != nil {
+		return nil, fmt.Errorf("OutageRepository.GetOutagesDuring: query outages: %w", err)
+	}
+	return outages, nil
 }
 
 func (r *gormOutageRepository) GetOutageAuditLogs(outageID uint) ([]types.OutageAuditLog, error) {

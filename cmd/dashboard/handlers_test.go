@@ -10,8 +10,6 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"ship-status-dash/pkg/auth"
 	"ship-status-dash/pkg/config"
@@ -20,9 +18,8 @@ import (
 	"ship-status-dash/pkg/types"
 )
 
-// newTestHandlers returns Handlers backed by cfg, db, a real DBOutageManager (no Slack), mock pings, and an empty group cache.
-// Use it for handler tests that need config + persistence without standing up the full server.
-func newTestHandlers(t *testing.T, cfg *types.DashboardConfig, db *gorm.DB) *Handlers {
+// newTestHandlers returns Handlers backed by cfg, the given outage manager, mock pings, and an empty group cache.
+func newTestHandlers(t *testing.T, cfg *types.DashboardConfig, om outage.OutageManager) *Handlers {
 	t.Helper()
 	cfgManager, err := config.NewManager("", func(string) (*types.DashboardConfig, error) {
 		return cfg, nil
@@ -30,10 +27,9 @@ func newTestHandlers(t *testing.T, cfg *types.DashboardConfig, db *gorm.DB) *Han
 	require.NoError(t, err)
 	cfgManager.Get()
 
-	manager := outage.NewDBOutageManager(db, nil, cfgManager, "https://test.example.com/", "", logrus.New())
 	pingRepo := &repositories.MockComponentPingRepository{}
 	cache := auth.NewGroupMembershipCache(logrus.New())
-	return NewHandlers(logrus.New(), cfgManager, manager, pingRepo, cache)
+	return NewHandlers(logrus.New(), cfgManager, om, pingRepo, cache)
 }
 
 // minimalDashboardConfig is a tiny valid config (one component, one sub-component) for handler tests.
@@ -51,29 +47,34 @@ func minimalDashboardConfig() *types.DashboardConfig {
 }
 
 func TestGetOutagesDuringJSON(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	err = db.AutoMigrate(&types.Outage{}, &types.Reason{}, &types.SlackThread{}, &types.OutageAuditLog{})
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		sqlDB, _ := db.DB()
-		_ = sqlDB.Close()
-	})
-
 	cfg := minimalDashboardConfig()
-	h := newTestHandlers(t, cfg, db)
-
 	t0 := time.Date(2025, 4, 1, 10, 0, 0, 0, time.UTC)
-	repo := repositories.NewGORMOutageRepository(db)
-	require.NoError(t, repo.CreateOutage(&types.Outage{
-		ComponentName: "alpha", SubComponentName: "one",
-		Severity: types.SeverityDown, StartTime: t0,
-		Description: "x", DiscoveredFrom: "test", CreatedBy: "u",
-	}, "u"))
-
-	intPtr := func(n int) *int { return &n }
 	t1 := t0.Add(time.Hour)
 	t2 := t0.Add(2 * time.Hour)
+
+	mockOM := &outage.MockOutageManager{}
+	mockOM.GetOutagesDuringFn = func(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error) {
+		if len(refs) == 0 {
+			return []types.Outage{}, nil
+		}
+		if len(refs) == 1 && refs[0].ComponentSlug == "alpha" && refs[0].SubSlug == "one" &&
+			queryStart.Equal(t1) && queryEnd.Equal(t1) {
+			return []types.Outage{{
+				ComponentName:    "alpha",
+				SubComponentName: "one",
+				Severity:         types.SeverityDown,
+				StartTime:        t0,
+				Description:      "x",
+				DiscoveredFrom:   "test",
+				CreatedBy:        "u",
+			}}, nil
+		}
+		return []types.Outage{}, nil
+	}
+
+	h := newTestHandlers(t, cfg, mockOM)
+
+	intPtr := func(n int) *int { return &n }
 
 	tests := []struct {
 		name            string
