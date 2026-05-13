@@ -13,7 +13,8 @@ echo "==> Installing frontend dependencies..."
 make npm
 
 echo "==> Setting up MCP server venv..."
-python3.12 -m venv --clear mcp/.venv
+rm -rf mcp/.venv
+python3.12 -m venv mcp/.venv
 mcp/.venv/bin/pip install --upgrade pip -q
 mcp/.venv/bin/pip install -r mcp/requirements.txt -q
 
