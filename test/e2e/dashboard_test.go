@@ -45,6 +45,7 @@ func TestE2E_Dashboard(t *testing.T) {
 	t.Run("Components", testComponents(client))
 	t.Run("ComponentInfo", testComponentInfo(client))
 	t.Run("Outages", testOutages(client))
+	t.Run("OutagesDuring", testOutagesDuring(client))
 	t.Run("UpdateOutage", testUpdateOutage(client))
 	t.Run("DeleteOutage", testDeleteOutage(client))
 	t.Run("GetOutage", testGetOutage(client))
@@ -208,6 +209,66 @@ func updateOutage(t *testing.T, client *TestHTTPClient, componentName, subCompon
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func testOutagesDuring(client *TestHTTPClient) func(*testing.T) {
+	return func(t *testing.T) {
+		o := createOutage(t, client, "Prow", "Deck")
+		defer deleteOutage(t, client, "Prow", "Deck", o.ID)
+
+		st := o.StartTime.UTC()
+		mid := st.Add(30 * time.Second).Format(time.RFC3339Nano)
+		found := getOutagesDuring(t, client, mid, "", utils.Slugify("Prow"), utils.Slugify("Deck"), "", "")
+		var saw bool
+		for _, row := range found {
+			if row.ID == o.ID {
+				saw = true
+				break
+			}
+		}
+		require.True(t, saw, "expected outage at instant mid")
+
+		winStart := st.Add(-time.Minute).Format(time.RFC3339)
+		winEnd := st.Add(time.Hour).Format(time.RFC3339)
+		found2 := getOutagesDuring(t, client, winStart, winEnd, "", "", "", "")
+		saw = false
+		for _, row := range found2 {
+			if row.ID == o.ID {
+				saw = true
+				break
+			}
+		}
+		require.True(t, saw, "expected outage in overlapping range")
+
+		earlyStart := st.Add(-72 * time.Hour).Format(time.RFC3339)
+		earlyEnd := st.Add(-48 * time.Hour).Format(time.RFC3339)
+		empty := getOutagesDuring(t, client, earlyStart, earlyEnd, "", "", "", "")
+		for _, row := range empty {
+			assert.NotEqualf(t, o.ID, row.ID, "outage %d should not appear in non-overlapping window", o.ID)
+		}
+
+		resp, err := client.Get("/api/outages/during", false)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		t.Run("tag_and_team_filters", func(t *testing.T) {
+			o := createOutage(t, client, "Prow", "Tide")
+			defer deleteOutage(t, client, "Prow", "Tide", o.ID)
+
+			st := o.StartTime.UTC()
+			mid := st.Add(30 * time.Second).Format(time.RFC3339Nano)
+			found := getOutagesDuring(t, client, mid, "", "", "", "pr-merging", "TestPlatform")
+			var saw bool
+			for _, row := range found {
+				if row.ID == o.ID {
+					saw = true
+					break
+				}
+			}
+			require.True(t, saw, "expected outage when filtering by Prow ship_team (TestPlatform) and Tide tag (pr-merging)")
+		})
+	}
 }
 
 func testOutages(client *TestHTTPClient) func(*testing.T) {

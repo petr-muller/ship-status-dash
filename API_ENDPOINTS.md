@@ -25,12 +25,23 @@ For authentication details, see [cmd/dashboard/README.md](cmd/dashboard/README.m
 - **GET** `/api/components/{componentName}` - Get information for a specific component
   - **Public:** Yes
 
+- **GET** `/api/sub-components` - List sub-components; optional query parameters `componentName`, `tag`, and `team` (when more than one is given, a sub-component must match all of them)
+  - **Public:** Yes
+
+### Tags
+
+- **GET** `/api/tags` - Get the configured tag definitions
+  - **Public:** Yes
+
 ### Outages
 
 - **GET** `/api/components/{componentName}/outages` - Get all outages for a component
   - **Public:** Yes
 
 - **GET** `/api/components/{componentName}/{subComponentName}/outages` - Get all outages for a sub-component
+  - **Public:** Yes
+
+- **GET** `/api/outages/during` - Get outages overlapping a time window or instant (query params: `start` and/or `end` as RFC3339 or RFC3339Nano — at least one required; optional `componentName`, `subComponentName`, `tag`, `team` — `componentName`, `tag`, and `team` use the same AND rules as **GET** `/api/sub-components`; `subComponentName` is only allowed when `componentName` is set and narrows to that sub-component)
   - **Public:** Yes
 
 - **GET** `/api/components/{componentName}/{subComponentName}/outages/{outageId}` - Get a specific outage by ID

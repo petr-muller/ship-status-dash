@@ -2,6 +2,7 @@ package outage
 
 import (
 	"fmt"
+	"time"
 
 	"ship-status-dash/pkg/config"
 	"ship-status-dash/pkg/repositories"
@@ -23,6 +24,7 @@ type OutageManager interface {
 	GetActiveOutagesForComponent(componentSlug string) ([]types.Outage, error)
 	GetActiveOutagesCreatedBy(componentSlug, subComponentSlug, createdBy string) ([]types.Outage, error)
 	GetActiveOutagesDiscoveredFrom(componentSlug, subComponentSlug, discoveredFrom string) ([]types.Outage, error)
+	GetOutagesDuring(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error)
 	GetOutageAuditLogs(outageID uint) ([]types.OutageAuditLog, error)
 	DeleteOutage(outage *types.Outage, user string) error
 }
@@ -157,6 +159,11 @@ func (m *DBOutageManager) GetActiveOutagesCreatedBy(componentSlug, subComponentS
 func (m *DBOutageManager) GetActiveOutagesDiscoveredFrom(componentSlug, subComponentSlug, discoveredFrom string) ([]types.Outage, error) {
 	outageRepo := repositories.NewGORMOutageRepository(m.db)
 	return outageRepo.GetActiveOutagesDiscoveredFrom(componentSlug, subComponentSlug, discoveredFrom)
+}
+
+func (m *DBOutageManager) GetOutagesDuring(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error) {
+	outageRepo := repositories.NewGORMOutageRepository(m.db)
+	return outageRepo.GetOutagesDuring(queryStart, queryEnd, refs)
 }
 
 func (m *DBOutageManager) GetOutageAuditLogs(outageID uint) ([]types.OutageAuditLog, error) {

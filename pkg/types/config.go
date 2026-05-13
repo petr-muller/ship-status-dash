@@ -15,6 +15,47 @@ func (c *DashboardConfig) GetComponentBySlug(slug string) *Component {
 	return nil
 }
 
+// SubComponentRef identifies a sub-component by config slugs for server-side filtering.
+type SubComponentRef struct {
+	ComponentSlug string
+	SubSlug       string
+}
+
+// SubComponentRefsMatching returns component and sub-component slugs that satisfy the optional filters.
+// Filters use AND semantics consistent with the sub-components list API: componentSlug, tag, and team
+// narrow results; when subSlug is non-empty, only that sub-component is included (if it passes other filters).
+func (c *DashboardConfig) SubComponentRefsMatching(componentSlug, subSlug, tag, team string) []SubComponentRef {
+	var refs []SubComponentRef
+	for _, component := range c.Components {
+		if componentSlug != "" && component.Slug != componentSlug {
+			continue
+		}
+		if team != "" && team != component.ShipTeam {
+			continue
+		}
+		for i := range component.Subcomponents {
+			sub := &component.Subcomponents[i]
+			if subSlug != "" && sub.Slug != subSlug {
+				continue
+			}
+			if tag != "" {
+				var match bool
+				for _, t := range sub.Tags {
+					if t == tag {
+						match = true
+						break
+					}
+				}
+				if !match {
+					continue
+				}
+			}
+			refs = append(refs, SubComponentRef{ComponentSlug: component.Slug, SubSlug: sub.Slug})
+		}
+	}
+	return refs
+}
+
 // Component represents a top-level system component with sub-components and ownership information.
 type Component struct {
 	Name           string                 `json:"name" yaml:"name"`

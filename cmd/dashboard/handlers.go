@@ -18,6 +18,7 @@ import (
 	"ship-status-dash/pkg/outage"
 	"ship-status-dash/pkg/repositories"
 	"ship-status-dash/pkg/types"
+	"ship-status-dash/pkg/utils"
 )
 
 // Handlers contains the HTTP request handlers for the dashboard API.
@@ -554,7 +555,7 @@ func (h *Handlers) GetSubComponentStatusJSON(w http.ResponseWriter, r *http.Requ
 
 	status := types.StatusHealthy
 	if len(outages) > 0 {
-		status = determineStatusFromSeverity(outages)
+		status = types.StatusFromOutages(outages)
 	}
 
 	lastPingTime, err := h.pingRepo.GetLastPingTime(componentName, subComponentName)
@@ -630,7 +631,7 @@ func (h *Handlers) getComponentStatus(component *types.Component, logger *logrus
 	} else if len(subComponentsWithOutages) < len(component.Subcomponents) {
 		status = types.StatusPartial
 	} else {
-		status = determineStatusFromSeverity(outages)
+		status = types.StatusFromOutages(outages)
 	}
 
 	// The last ping time is the time of the most recent ping for ANY of the sub-components in the component.
@@ -647,46 +648,6 @@ func (h *Handlers) getComponentStatus(component *types.Component, logger *logrus
 	}, nil
 }
 
-func determineStatusFromSeverity(outages []types.Outage) types.Status {
-	if len(outages) == 0 {
-		return types.StatusHealthy
-	}
-
-	// First, determine status based on confirmed outages
-	confirmedOutages := make([]types.Outage, 0)
-	hasUnconfirmedOutage := false
-
-	for _, outage := range outages {
-		if outage.ConfirmedAt.Valid {
-			confirmedOutages = append(confirmedOutages, outage)
-		} else {
-			hasUnconfirmedOutage = true
-		}
-	}
-
-	// If there are confirmed outages, determine status by their severity
-	if len(confirmedOutages) > 0 {
-		mostCriticalSeverity := confirmedOutages[0].Severity
-		highestLevel := types.GetSeverityLevel(mostCriticalSeverity)
-
-		for _, outage := range confirmedOutages {
-			level := types.GetSeverityLevel(outage.Severity)
-			if level > highestLevel {
-				highestLevel = level
-				mostCriticalSeverity = outage.Severity
-			}
-		}
-		return mostCriticalSeverity.ToStatus()
-	}
-
-	// Only unconfirmed outages - return Suspected
-	if hasUnconfirmedOutage {
-		return types.StatusSuspected
-	}
-
-	return types.StatusHealthy
-}
-
 // ListTagsJSON returns the list of configured tags.
 func (h *Handlers) ListTagsJSON(w http.ResponseWriter, r *http.Request) {
 	respondWithJSON(w, http.StatusOK, h.config().Tags)
@@ -699,34 +660,80 @@ func (h *Handlers) ListSubComponentsJSON(w http.ResponseWriter, r *http.Request)
 	tag := r.URL.Query().Get("tag")
 	team := r.URL.Query().Get("team")
 
-	components := h.config().Components
-	items := []types.SubComponentListItem{}
-	for _, component := range components {
-		if componentSlug != "" && component.Slug != componentSlug {
+	refs := h.config().SubComponentRefsMatching(componentSlug, "", tag, team)
+	items := make([]types.SubComponentListItem, 0, len(refs))
+	for _, ref := range refs {
+		component := h.config().GetComponentBySlug(ref.ComponentSlug)
+		if component == nil {
 			continue
 		}
-		if team != "" && team != component.ShipTeam {
+		sub := component.GetSubComponentBySlug(ref.SubSlug)
+		if sub == nil {
 			continue
 		}
-
-		if tag == "" {
-			for _, sub := range component.Subcomponents {
-				items = append(items, types.SubComponentListItem{ComponentName: component.Name, SubComponent: sub})
-			}
-		} else {
-		subComponentLoop:
-			for _, sub := range component.Subcomponents {
-				for _, t := range sub.Tags {
-					if t == tag {
-						items = append(items, types.SubComponentListItem{ComponentName: component.Name, SubComponent: sub})
-						continue subComponentLoop
-					}
-				}
-			}
-		}
+		items = append(items, types.SubComponentListItem{ComponentName: component.Name, SubComponent: *sub})
 	}
 
 	respondWithJSON(w, http.StatusOK, items)
+}
+
+// GetOutagesDuringJSON returns outages overlapping the requested time window (or a single instant when only one of start/end is set).
+func (h *Handlers) GetOutagesDuringJSON(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	startStr := q.Get("start")
+	endStr := q.Get("end")
+	componentSlug := q.Get("componentName")
+	subSlug := q.Get("subComponentName")
+	tag := q.Get("tag")
+	team := q.Get("team")
+
+	logger := h.logger.WithFields(logrus.Fields{
+		"start":            startStr,
+		"end":              endStr,
+		"componentName":    componentSlug,
+		"subComponentName": subSlug,
+		"tag":              tag,
+		"team":             team,
+	})
+
+	if startStr == "" && endStr == "" {
+		respondWithError(w, http.StatusBadRequest, "at least one of start or end is required (RFC3339 or RFC3339Nano)")
+		return
+	}
+	if subSlug != "" && componentSlug == "" {
+		respondWithError(w, http.StatusBadRequest, "componentName is required when subComponentName is set")
+		return
+	}
+
+	queryStart, queryEnd, errMsg := utils.OutagesDuringQueryBounds(startStr, endStr)
+	if errMsg != "" {
+		respondWithError(w, http.StatusBadRequest, errMsg)
+		return
+	}
+
+	if componentSlug != "" {
+		component := h.config().GetComponentBySlug(componentSlug)
+		if component == nil {
+			respondWithError(w, http.StatusNotFound, "Component not found")
+			return
+		}
+		if subSlug != "" && component.GetSubComponentBySlug(subSlug) == nil {
+			respondWithError(w, http.StatusNotFound, "Sub-component not found")
+			return
+		}
+	}
+
+	refs := h.config().SubComponentRefsMatching(componentSlug, subSlug, tag, team)
+	outages, err := h.outageManager.GetOutagesDuring(queryStart, queryEnd, refs)
+	if err != nil {
+		logger.WithField("error", err).Error("Failed to query outages during window")
+		respondWithError(w, http.StatusInternalServerError, "Failed to get outages")
+		return
+	}
+	if outages == nil {
+		outages = []types.Outage{}
+	}
+	respondWithJSON(w, http.StatusOK, outages)
 }
 
 func (h *Handlers) PostComponentMonitorReportJSON(w http.ResponseWriter, r *http.Request) {

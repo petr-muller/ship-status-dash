@@ -3,6 +3,7 @@ package repositories
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -24,6 +25,8 @@ type OutageRepository interface {
 	GetActiveOutagesForComponent(componentSlug string) ([]types.Outage, error)
 	GetActiveOutagesCreatedBy(componentSlug, subComponentSlug, createdBy string) ([]types.Outage, error)
 	GetActiveOutagesDiscoveredFrom(componentSlug, subComponentSlug, discoveredFrom string) ([]types.Outage, error)
+
+	GetOutagesDuring(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error)
 
 	GetOutageAuditLogs(outageID uint) ([]types.OutageAuditLog, error)
 
@@ -151,6 +154,29 @@ func (r *gormOutageRepository) GetActiveOutagesDiscoveredFrom(componentSlug, sub
 			componentSlug, subComponentSlug, discoveredFrom).
 		Find(&activeOutages).Error
 	return activeOutages, err
+}
+
+// GetOutagesDuring returns outages that overlap the query window: start_time <= queryEnd and
+// (end_time IS NULL OR end_time > queryStart). When queryStart equals queryEnd this matches "active at that instant".
+// refs limits rows to the given (component_slug, sub_slug) pairs; empty refs returns an empty slice.
+func (r *gormOutageRepository) GetOutagesDuring(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error) {
+	if len(refs) == 0 {
+		return []types.Outage{}, nil
+	}
+	qs := queryStart.UTC()
+	qe := queryEnd.UTC()
+	q := r.db.Preload("Reasons").
+		Where("start_time <= ? AND (end_time IS NULL OR end_time > ?)", qe, qs)
+	conds := make([]string, len(refs))
+	args := make([]interface{}, 0, len(refs)*2)
+	for i, ref := range refs {
+		conds[i] = "(component_name = ? AND sub_component_name = ?)"
+		args = append(args, ref.ComponentSlug, ref.SubSlug)
+	}
+	q = q.Where("("+strings.Join(conds, " OR ")+")", args...)
+	var outages []types.Outage
+	err := q.Order("start_time DESC").Find(&outages).Error
+	return outages, err
 }
 
 func (r *gormOutageRepository) GetOutageAuditLogs(outageID uint) ([]types.OutageAuditLog, error) {

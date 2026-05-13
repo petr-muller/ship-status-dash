@@ -137,6 +137,10 @@ func (m *MockOutageRepository) GetActiveOutagesForComponent(componentSlug string
 	return m.ActiveOutagesForComponent, nil
 }
 
+func (m *MockOutageRepository) GetOutagesDuring(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error) {
+	return []types.Outage{}, nil
+}
+
 func (m *MockOutageRepository) DeleteOutage(outage *types.Outage, user string) error {
 	outageCopy := *outage
 	m.DeletedOutages = append(m.DeletedOutages, &outageCopy)

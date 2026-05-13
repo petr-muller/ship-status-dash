@@ -118,6 +118,37 @@ func getOutages(t *testing.T, client *TestHTTPClient, componentName, subComponen
 	return outages
 }
 
+// getOutagesDuring calls GET /api/outages/during with optional RFC3339 start/end and filters (slugs for componentName / subComponentName).
+func getOutagesDuring(t *testing.T, client *TestHTTPClient, start, end, componentName, subComponentName, tag, team string) []types.Outage {
+	params := url.Values{}
+	if start != "" {
+		params.Set("start", start)
+	}
+	if end != "" {
+		params.Set("end", end)
+	}
+	if componentName != "" {
+		params.Set("componentName", componentName)
+	}
+	if subComponentName != "" {
+		params.Set("subComponentName", subComponentName)
+	}
+	if tag != "" {
+		params.Set("tag", tag)
+	}
+	if team != "" {
+		params.Set("team", team)
+	}
+	path := "/api/outages/during?" + params.Encode()
+	resp, err := client.Get(path, false)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "path=%s", path)
+	var outages []types.Outage
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&outages))
+	return outages
+}
+
 // getAllComponentsStatus is a helper function to get all components status and do basic assertions
 func getAllComponentsStatus(t *testing.T, client *TestHTTPClient) []types.ComponentStatus {
 	resp, err := client.Get("/api/status", false)

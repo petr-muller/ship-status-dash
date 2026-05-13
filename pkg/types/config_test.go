@@ -3,167 +3,65 @@ package types
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestComponent_GetSubComponentBySlug(t *testing.T) {
-	tests := []struct {
-		name             string
-		component        Component
-		subComponentName string
-		expectedResult   *SubComponent
-	}{
-		{
-			name: "subcomponent found - single subcomponent",
-			component: Component{
-				Name: "Prow",
+func TestDashboardConfig_SubComponentRefsMatching(t *testing.T) {
+	cfg := &DashboardConfig{
+		Components: []*Component{
+			{
+				Name: "Alpha", Slug: "alpha", ShipTeam: "team-a",
 				Subcomponents: []SubComponent{
-					{Name: "Tide", Slug: "tide", Description: "Merge bot"},
+					{Name: "One", Slug: "one", Tags: []string{"net", "ci"}},
+					{Name: "Two", Slug: "two"},
 				},
 			},
-			subComponentName: "tide",
-			expectedResult:   &SubComponent{Name: "Tide", Slug: "tide", Description: "Merge bot"},
-		},
-		{
-			name: "subcomponent found - multiple subcomponents",
-			component: Component{
-				Name: "Prow",
+			{
+				Name: "Beta", Slug: "beta", ShipTeam: "team-b",
 				Subcomponents: []SubComponent{
-					{Name: "Tide", Slug: "tide", Description: "Merge bot"},
-					{Name: "Deck", Slug: "deck", Description: "Dashboard"},
-					{Name: "Hook", Slug: "hook", Description: "Webhook handler"},
+					{Name: "One", Slug: "one", Tags: []string{"net"}},
 				},
 			},
-			subComponentName: "deck",
-			expectedResult:   &SubComponent{Name: "Deck", Slug: "deck", Description: "Dashboard"},
-		},
-		{
-			name: "subcomponent not found",
-			component: Component{
-				Name: "Prow",
-				Subcomponents: []SubComponent{
-					{Name: "Tide", Slug: "tide", Description: "Merge bot"},
-					{Name: "Deck", Slug: "deck", Description: "Dashboard"},
-				},
-			},
-			subComponentName: "nonexistent",
-			expectedResult:   nil,
-		},
-		{
-			name: "empty subcomponents list",
-			component: Component{
-				Name:          "Prow",
-				Subcomponents: []SubComponent{},
-			},
-			subComponentName: "any-sub-component",
-			expectedResult:   nil,
-		},
-		{
-			name: "case sensitive matching",
-			component: Component{
-				Name: "Prow",
-				Subcomponents: []SubComponent{
-					{Name: "Tide", Slug: "tide", Description: "Merge bot"},
-				},
-			},
-			subComponentName: "Tide", // name, not slug
-			expectedResult:   nil,
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.component.GetSubComponentBySlug(tt.subComponentName)
+	t.Run("no filters all refs", func(t *testing.T) {
+		got := cfg.SubComponentRefsMatching("", "", "", "")
+		assert.ElementsMatch(t, []SubComponentRef{
+			{ComponentSlug: "alpha", SubSlug: "one"},
+			{ComponentSlug: "alpha", SubSlug: "two"},
+			{ComponentSlug: "beta", SubSlug: "one"},
+		}, got)
+	})
 
-			if tt.expectedResult == nil {
-				assert.Nil(t, result)
-			} else {
-				if result == nil {
-					t.Fatalf("got nil result, want non-nil: %+v", tt.expectedResult)
-				}
-				if diff := cmp.Diff(*tt.expectedResult, *result); diff != "" {
-					t.Errorf("GetSubComponentBySlug mismatch (-want +got):\n%s", diff)
-				}
-			}
-		})
-	}
-}
+	t.Run("component filter", func(t *testing.T) {
+		got := cfg.SubComponentRefsMatching("alpha", "", "", "")
+		assert.ElementsMatch(t, []SubComponentRef{
+			{ComponentSlug: "alpha", SubSlug: "one"},
+			{ComponentSlug: "alpha", SubSlug: "two"},
+		}, got)
+	})
 
-func TestConfig_GetComponentBySlug(t *testing.T) {
-	tests := []struct {
-		name           string
-		config         DashboardConfig
-		componentSlug  string
-		expectedResult *Component
-	}{
-		{
-			name: "component found - single component",
-			config: DashboardConfig{
-				Components: []*Component{
-					{Name: "Prow", Slug: "prow", Description: "CI/CD system"},
-				},
-			},
-			componentSlug:  "prow",
-			expectedResult: &Component{Name: "Prow", Slug: "prow", Description: "CI/CD system"},
-		},
-		{
-			name: "component found - multiple components",
-			config: DashboardConfig{
-				Components: []*Component{
-					{Name: "Prow", Slug: "prow", Description: "CI/CD system"},
-					{Name: "Build Farm", Slug: "build-farm", Description: "Build infrastructure"},
-					{Name: "Registry", Slug: "registry", Description: "Container registry"},
-				},
-			},
-			componentSlug:  "build-farm",
-			expectedResult: &Component{Name: "Build Farm", Slug: "build-farm", Description: "Build infrastructure"},
-		},
-		{
-			name: "component not found",
-			config: DashboardConfig{
-				Components: []*Component{
-					{Name: "Prow", Slug: "prow", Description: "CI/CD system"},
-					{Name: "Build Farm", Slug: "build-farm", Description: "Build infrastructure"},
-				},
-			},
-			componentSlug:  "nonexistent",
-			expectedResult: nil,
-		},
-		{
-			name: "empty components list",
-			config: DashboardConfig{
-				Components: []*Component{},
-			},
-			componentSlug:  "any-component",
-			expectedResult: nil,
-		},
-		{
-			name: "case sensitive matching",
-			config: DashboardConfig{
-				Components: []*Component{
-					{Name: "Prow", Slug: "prow", Description: "CI/CD system"},
-				},
-			},
-			componentSlug:  "Prow", // name, not slug
-			expectedResult: nil,
-		},
-	}
+	t.Run("team filter", func(t *testing.T) {
+		got := cfg.SubComponentRefsMatching("", "", "", "team-b")
+		assert.Equal(t, []SubComponentRef{{ComponentSlug: "beta", SubSlug: "one"}}, got)
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.config.GetComponentBySlug(tt.componentSlug)
+	t.Run("tag filter", func(t *testing.T) {
+		got := cfg.SubComponentRefsMatching("", "", "net", "")
+		assert.ElementsMatch(t, []SubComponentRef{
+			{ComponentSlug: "alpha", SubSlug: "one"},
+			{ComponentSlug: "beta", SubSlug: "one"},
+		}, got)
+	})
 
-			if tt.expectedResult == nil {
-				assert.Nil(t, result)
-			} else {
-				if result == nil {
-					t.Fatalf("got nil result, want non-nil: %+v", tt.expectedResult)
-				}
-				if diff := cmp.Diff(*tt.expectedResult, *result); diff != "" {
-					t.Errorf("GetComponentBySlug mismatch (-want +got):\n%s", diff)
-				}
-			}
-		})
-	}
+	t.Run("component and sub slug", func(t *testing.T) {
+		got := cfg.SubComponentRefsMatching("beta", "one", "", "")
+		assert.Equal(t, []SubComponentRef{{ComponentSlug: "beta", SubSlug: "one"}}, got)
+	})
+
+	t.Run("component tag and", func(t *testing.T) {
+		got := cfg.SubComponentRefsMatching("alpha", "", "ci", "")
+		assert.Equal(t, []SubComponentRef{{ComponentSlug: "alpha", SubSlug: "one"}}, got)
+	})
 }

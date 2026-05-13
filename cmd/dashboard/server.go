@@ -93,6 +93,12 @@ func (s *Server) setupRoutes() http.Handler {
 			protected: false,
 		},
 		{
+			path:      "/api/outages/during",
+			method:    http.MethodGet,
+			handler:   s.handlers.GetOutagesDuringJSON,
+			protected: false,
+		},
+		{
 			path:      "/api/components/{componentName}",
 			method:    http.MethodGet,
 			handler:   s.handlers.GetComponentInfoJSON,

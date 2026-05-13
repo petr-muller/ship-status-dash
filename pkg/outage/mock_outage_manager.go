@@ -1,6 +1,8 @@
 package outage
 
 import (
+	"time"
+
 	"ship-status-dash/pkg/types"
 )
 
@@ -95,6 +97,11 @@ func (m *MockOutageManager) GetActiveOutagesDiscoveredFrom(componentSlug, subCom
 	if m.GetActiveOutagesDiscoveredFromFn != nil {
 		return m.GetActiveOutagesDiscoveredFromFn(componentSlug, subComponentSlug, discoveredFrom)
 	}
+	return []types.Outage{}, nil
+}
+
+// GetOutagesDuring is included for interface completeness.
+func (m *MockOutageManager) GetOutagesDuring(queryStart, queryEnd time.Time, refs []types.SubComponentRef) ([]types.Outage, error) {
 	return []types.Outage{}, nil
 }
 
