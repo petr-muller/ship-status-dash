@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review: openshift-eng/ship-status-dash#88</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.6; color: #24292f; background: #fff; padding: 2rem; }
+  .container { max-width: 52rem; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.15rem; margin-top: 1.8rem; margin-bottom: 0.5rem; border-bottom: 1px solid #d0d7de; padding-bottom: 0.3rem; }
+  h3 { font-size: 1rem; margin-top: 1.2rem; margin-bottom: 0.3rem; }
+  p, li { margin-bottom: 0.4rem; }
+  ul { padding-left: 1.4rem; }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.88em; background: #f6f8fa; padding: 0.15em 0.35em; border-radius: 3px; }
+  pre { background: #f6f8fa; padding: 0.8rem 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; margin: 0.5rem 0; }
+  pre code { background: none; padding: 0; }
+  .meta { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1.5rem; font-size: 0.9rem; }
+  .meta a { color: #0969da; text-decoration: none; }
+  .meta a:hover { text-decoration: underline; }
+  .verdict { background: #dafbe1; border: 1px solid #aceebb; border-radius: 6px; padding: 0.8rem 1rem; margin-bottom: 1rem; }
+  .verdict strong { color: #1a7f37; }
+  .severity { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 0.1em 0.5em; border-radius: 3px; margin-right: 0.3rem; vertical-align: middle; }
+  .sev-nit { background: #ddf4ff; color: #0969da; }
+  .sev-question { background: #fff8c5; color: #9a6700; }
+  .finding { margin-bottom: 1.2rem; padding-left: 0.5rem; border-left: 3px solid #d0d7de; }
+  .finding-nit { border-left-color: #54aeff; }
+  .finding-question { border-left-color: #d4a72c; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Review: TRT-2656: Resolve ongoing outage when sub-component is removed from the config</h1>
+
+<div class="meta">
+  <strong>PR:</strong> <a href="https://github.com/openshift-eng/ship-status-dash/pull/88">openshift-eng/ship-status-dash#88</a><br>
+  <strong>Author:</strong> smg247 (Stephen Goeddel)<br>
+  <strong>Head SHA:</strong> <code>871a821251c147a7040eb0df6a2f0c56d92483b5</code><br>
+  <strong>Base:</strong> main<br>
+  <strong>Reviewed:</strong> 2026-05-14T11:45:37Z
+</div>
+
+<h2>Verdict</h2>
+<div class="verdict">
+  <strong>Approve.</strong>
+  <p>Well-structured fix for a real operational issue. The core reconciliation logic is correct &mdash; key format matches between config slugs and outage records, active-outage definition is consistent with existing queries, and audit logging is preserved. Tests cover the important scenarios. The e2e reload-detection rework (timestamp &rarr; monotonic counter) is a solid reliability improvement. Only nits below, nothing blocking.</p>
+</div>
+
+<h2>What this PR does</h2>
+<ul>
+  <li>Adds <code>ResolveActiveOutagesForMissingSubComponents</code> on <code>*DBOutageManager</code>: on startup and on each config hot-reload, fetches all active outages, compares their component/sub-component slug pairs against the current config, and sets <code>EndTime</code> on any that no longer exist &mdash; going through <code>UpdateOutage</code> so audit logs are recorded.</li>
+  <li>Wires the resolver into <code>main.go</code>: runs once at startup, then registers a <code>configManager.OnUpdate</code> callback for subsequent reloads.</li>
+  <li>Changes <code>NewDBOutageManager</code> return type from the <code>OutageManager</code> interface to the concrete <code>*DBOutageManager</code> so the new method is callable.</li>
+  <li>Adds <code>reloadCount atomic.Uint64</code> to the config manager and moves the "Config reloaded successfully" log to <em>after</em> all OnUpdate callbacks complete, including the count in the log fields.</li>
+  <li>Reworks e2e config-reload detection from <code>--since-time</code> log parsing to <code>--tail</code> + monotonic <code>reload_count</code> comparison, eliminating clock-skew sensitivity.</li>
+</ul>
+
+<h2>Findings</h2>
+
+<div class="finding finding-nit">
+  <h3><span class="severity sev-nit">nit</span> Redundant summary log after per-outage logs</h3>
+  <p><code>pkg/outage/config_reload_resolve.go:73-75</code></p>
+  <pre><code>if resolved > 0 {
+    entry.WithField("count", resolved).Info("Resolved active outages for sub-components removed from configuration")
+}</code></pre>
+  <p>Each resolved outage already gets its own Info log at lines 67-71. The summary is mildly useful for quick scanning in high-volume logs but slightly redundant. Personal preference territory.</p>
+</div>
+
+<div class="finding finding-nit">
+  <h3><span class="severity sev-nit">nit</span> New method not on the OutageManager interface</h3>
+  <p><code>pkg/outage/outage_manager.go:16-28</code>, <code>pkg/outage/config_reload_resolve.go:40</code></p>
+  <p><code>ResolveActiveOutagesForMissingSubComponents</code> lives only on the concrete <code>*DBOutageManager</code>, not on the <code>OutageManager</code> interface. This is fine today &mdash; only <code>main.go</code> calls it and holds the concrete type. If mock-based tests or other callers ever need it, they'd require the concrete type. Adding it to the interface would be more symmetric but isn't blocking.</p>
+</div>
+
+<div class="finding finding-nit">
+  <h3><span class="severity sev-nit">nit</span> Typo in PR description</h3>
+  <p>PR description body</p>
+  <p>"phatom" should be "phantom".</p>
+</div>
+
+<h2>Things I checked and found correct</h2>
+<ul>
+  <li><strong>Key format consistency:</strong> <code>configuredSubComponentKeys</code> uses <code>c.Slug</code>/<code>sub.Slug</code>. Outage records store slugs in <code>ComponentName</code>/<code>SubComponentName</code> (confirmed via <code>component_monitoring_report.go:162-163</code>, <code>absent_report.go:153-154</code>, <code>handlers.go:236-237</code>). Match is correct.</li>
+  <li><strong>Active-outage definition:</strong> <code>GetAllActiveOutages</code> uses <code>end_time IS NULL OR end_time > now()</code>, matching the existing <code>GetActiveOutagesForComponent</code> query.</li>
+  <li><strong>Audit trail:</strong> Resolution goes through <code>m.UpdateOutage(o, resolverUser)</code> which records in <code>outage_audit_logs</code> with user <code>"dashboard-config-reload"</code>.</li>
+  <li><strong>Nil safety:</strong> Nil config returns empty allowed set (resolves everything). Nil component pointers in the slice are skipped.</li>
+  <li><strong>Atomics:</strong> <code>reloadCount</code> uses <code>atomic.Uint64</code>, incremented outside the mutex after callbacks &mdash; correct ordering.</li>
+  <li><strong>E2e timing:</strong> Poll interval is 10s in e2e (<code>--config-update-poll-interval 10s</code>), well within the 90s test timeout.</li>
+  <li><strong>Security:</strong> No auth bypass, no injection vectors. Audit trail maintained for automated resolutions.</li>
+  <li><strong>Error handling:</strong> Individual outage-update failures are logged and skipped (partial progress preferred over all-or-nothing). The listing error is returned. Appropriate strategy.</li>
+</ul>
+
+<h2>Open questions for the author</h2>
+<ul>
+  <li>Is keeping <code>ResolveActiveOutagesForMissingSubComponents</code> off the <code>OutageManager</code> interface intentional, or just expedient? If other callers (e.g., test mocks) ever need it, the concrete type dependency could be awkward.</li>
+</ul>
+
+</div>
+</body>
+</html>
