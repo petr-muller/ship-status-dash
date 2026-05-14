@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Review: openshift-eng/ship-status-dash#89</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; line-height: 1.6; max-width: 52em; margin: 2em auto; padding: 0 1em; color: #1a1a1a; background: #fafafa; }
+  h1, h2, h3 { margin-top: 1.4em; }
+  h1 { font-size: 1.4em; border-bottom: 2px solid #0969da; padding-bottom: 0.3em; }
+  h2 { font-size: 1.15em; border-bottom: 1px solid #d0d7de; padding-bottom: 0.2em; }
+  h3 { font-size: 1em; }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.9em; background: #eef1f5; padding: 0.15em 0.35em; border-radius: 3px; }
+  pre { background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 1em; overflow-x: auto; font-size: 0.85em; line-height: 1.45; }
+  pre code { background: none; padding: 0; }
+  .header-block { background: #fff; border: 1px solid #d0d7de; border-radius: 6px; padding: 1em 1.2em; margin-bottom: 1.5em; }
+  .header-block p { margin: 0.2em 0; }
+  .verdict { background: #dafbe1; border-left: 4px solid #1a7f37; padding: 0.8em 1em; border-radius: 4px; margin: 1em 0; }
+  .severity-blocking { color: #cf222e; font-weight: bold; }
+  .severity-should-fix { color: #bf8700; font-weight: bold; }
+  .severity-nit { color: #57606a; font-weight: bold; }
+  .severity-question { color: #0969da; font-weight: bold; }
+  .finding { margin-bottom: 1.5em; padding-left: 0.8em; border-left: 3px solid #d0d7de; }
+  .finding-blocking { border-left-color: #cf222e; }
+  .finding-should-fix { border-left-color: #bf8700; }
+  .finding-nit { border-left-color: #d0d7de; }
+  .finding-question { border-left-color: #0969da; }
+  ul { padding-left: 1.5em; }
+  a { color: #0969da; }
+</style>
+</head>
+<body>
+
+<div class="header-block">
+  <p><strong>PR:</strong> <a href="https://github.com/openshift-eng/ship-status-dash/pull/89">openshift-eng/ship-status-dash#89</a></p>
+  <p><strong>Title:</strong> TRT-2363: Add GET /api/outages/during for overlap queries</p>
+  <p><strong>Head SHA:</strong> <code>0b4f795c9d4bd3940a589d2f9b2c2e8767e73c26</code></p>
+  <p><strong>Base:</strong> main</p>
+  <p><strong>Reviewed:</strong> 2026-05-14T11:09:57Z</p>
+</div>
+
+<h1>Verdict</h1>
+<div class="verdict">
+  <strong>Approve with suggestions.</strong>
+  <p>The implementation is clean, well-layered, and has good test coverage. Two items worth addressing before merge: the deleted direct tests for <code>GetComponentBySlug</code>/<code>GetSubComponentBySlug</code> (loss of edge-case coverage), and calling <code>h.config()</code> multiple times per request (race with config reload). Neither is blocking, but both are easy fixes that strengthen the PR.</p>
+</div>
+
+<h1>What this PR does</h1>
+<ul>
+  <li>Adds <code>GET /api/outages/during</code>, a public endpoint that returns outages overlapping a time window or instant. Accepts <code>start</code>/<code>end</code> (RFC3339 or RFC3339Nano), plus optional <code>componentName</code>, <code>subComponentName</code>, <code>tag</code>, <code>team</code> filters.</li>
+  <li>Extracts <code>SubComponentRefsMatching()</code> on <code>DashboardConfig</code> to share AND-filtered sub-component lookup between <code>ListSubComponentsJSON</code> and the new endpoint.</li>
+  <li>Moves <code>determineStatusFromSeverity</code> from the handler to <code>types.StatusFromOutages</code> for reuse.</li>
+  <li>Adds <code>ParseRFC3339OrNanoUTC</code> and <code>OutagesDuringQueryBounds</code> utilities in <code>pkg/utils</code>.</li>
+  <li>Includes unit tests, handler-level tests, and e2e tests. Separately fixes MCP venv creation reliability.</li>
+</ul>
+
+<h1>Findings</h1>
+
+<h2>Should fix</h2>
+
+<div class="finding finding-should-fix">
+  <h3><span class="severity-should-fix">[should-fix]</span> Deleted tests for GetComponentBySlug and GetSubComponentBySlug</h3>
+  <p><code>pkg/types/config_test.go</code> (entire file rewritten)</p>
+  <p>The old test file had direct tests for <code>GetComponentBySlug</code> and <code>GetSubComponentBySlug</code> covering edge cases: empty list, slug not found, case sensitivity (name vs slug). These were removed and replaced with tests only for <code>SubComponentRefsMatching</code>. The lookup methods are still public API and used in handler logic. The new tests cover some of this indirectly, but the dedicated edge-case coverage is gone. These were small, fast tests &mdash; worth keeping alongside the new ones.</p>
+</div>
+
+<div class="finding finding-should-fix">
+  <h3><span class="severity-should-fix">[should-fix]</span> Multiple h.config() calls per request risk config-reload inconsistency</h3>
+  <p><code>cmd/dashboard/handlers.go:658-675</code> (ListSubComponentsJSON) and <code>cmd/dashboard/handlers.go:681-736</code> (GetOutagesDuringJSON)</p>
+  <p>Both handlers call <code>h.config()</code> once for <code>SubComponentRefsMatching</code>, then again (implicitly via <code>GetComponentBySlug</code>/<code>GetSubComponentBySlug</code>) for each ref in the loop. If config reloads between these calls, refs may point to slugs that no longer exist. The nil guards prevent crashes, but items could be silently dropped. Fix: assign <code>cfg := h.config()</code> once at handler entry and use it throughout.</p>
+  <pre><code>// Current (handlers.go:663-674):
+refs := h.config().SubComponentRefsMatching(componentSlug, "", tag, team)
+for _, ref := range refs {
+    component := h.config().GetComponentBySlug(ref.ComponentSlug)  // second call
+    ...
+    sub := component.GetSubComponentBySlug(ref.SubSlug)
+
+// Suggested:
+cfg := h.config()
+refs := cfg.SubComponentRefsMatching(componentSlug, "", tag, team)
+for _, ref := range refs {
+    component := cfg.GetComponentBySlug(ref.ComponentSlug)
+    ...</code></pre>
+</div>
+
+<h2>Nits</h2>
+
+<div class="finding finding-nit">
+  <h3><span class="severity-nit">[nit]</span> Unreachable test case name is misleading</h3>
+  <p><code>pkg/utils/query_time_test.go:76-78</code></p>
+  <p>The test case <code>empty_both_hits_end_branch</code> passes empty strings for both start and end. The handler rejects this before calling <code>OutagesDuringQueryBounds</code>, so this code path is unreachable in production. The test still exercises <code>ParseRFC3339OrNanoUTC("")</code> returning an error, which is fine, but the name suggests it's testing a real scenario. Consider renaming to something like <code>empty_strings_returns_error</code>.</p>
+</div>
+
+<h2>Questions</h2>
+
+<div class="finding finding-question">
+  <h3><span class="severity-question">[question]</span> Unbounded query window on a public endpoint</h3>
+  <p><code>cmd/dashboard/handlers.go:708-727</code>, <code>pkg/repositories/outage_repository.go:163-183</code></p>
+  <p>There's no limit on the time window size or the number of sub-component refs passed to the DB query. A caller could request <code>start=2000-01-01&amp;end=2099-01-01</code> with no component filter, hitting the full outages table across all sub-components. For a public endpoint, is this acceptable? Even a generous cap (e.g., 1 year, or a LIMIT on results) would prevent accidental or intentional abuse. This may be fine if the outages table is expected to stay small, but worth a conscious decision.</p>
+</div>
+
+<h1>Things I checked and found fine</h1>
+<ul>
+  <li><strong>SQL safety</strong>: <code>GetOutagesDuring</code> builds the WHERE clause with <code>?</code> placeholders only; user values go through GORM's parameterized args. The refs are pre-validated against config slugs. No injection risk.</li>
+  <li><strong>Route ordering</strong>: <code>/api/outages/during</code> is registered before parameterized <code>/api/components/{componentName}/...</code> routes, so gorilla/mux won't shadow it.</li>
+  <li><strong>Overlap query logic</strong>: <code>start_time &lt;= queryEnd AND (end_time IS NULL OR end_time &gt; queryStart)</code> correctly handles open-ended outages (NULL end_time) and point-in-time queries (queryStart == queryEnd).</li>
+  <li><strong>StatusFromOutages</strong>: Identical logic to the deleted <code>determineStatusFromSeverity</code>, just relocated. Tests moved too and match 1:1.</li>
+  <li><strong>SubComponentRefsMatching</strong>: AND semantics are correct and consistent with the existing ListSubComponentsJSON behavior before the refactor.</li>
+  <li><strong>E2e tests</strong>: Test creates an outage, queries at mid-point (instant), queries with a range window, queries a non-overlapping window, and verifies 400 on missing params. Also tests tag+team filtering.</li>
+  <li><strong>MCP venv fix</strong> (separate commit): Replaces <code>--clear</code> with <code>rm -rf</code> + fresh <code>venv</code>, and adds <code>chmod -R u+w</code> before removal. Reasonable fix for stale/broken venvs.</li>
+</ul>
+
+<h1>Open questions for the author</h1>
+<ul>
+  <li>Is the outages table expected to stay small enough that an unbounded time window + all sub-components is fine, or should we add a reasonable cap (max window duration or result LIMIT)?</li>
+  <li>Was the removal of <code>GetComponentBySlug</code>/<code>GetSubComponentBySlug</code> tests intentional, or an oversight during the config_test.go rewrite? Happy to see them restored alongside the new <code>SubComponentRefsMatching</code> tests.</li>
+</ul>
+
+</body>
+</html>
